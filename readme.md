@@ -1,6 +1,6 @@
 # Discord Pantheon Guild Bot
 
-A comprehensive Discord bot designed for multi-game guild management, character tracking, and attendance logging. Built with C# and .NET 10 using the DSharpPlus library.
+A comprehensive Discord bot designed for multi-game guild management, character tracking, and attendance logging. Built with C# and .NET 10 using the DSharpPlus library. Generally built around and to work with Pantheon Rise of the Fallen, this is generic enough to manage other games.
 
 ## Features
 
