@@ -1,4 +1,4 @@
-# Discord Pantheon Guild Bot (Bastion Guild Manager)
+# Discord Pantheon Guild Bot
 
 A comprehensive Discord bot designed for multi-game guild management, character tracking, and attendance logging. Built with C# and .NET 10 using the DSharpPlus library.
 
