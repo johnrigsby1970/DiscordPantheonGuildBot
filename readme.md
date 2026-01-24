@@ -37,7 +37,7 @@ A comprehensive Discord bot designed for multi-game guild management, character 
 
 ## Configuration
 
-The bot uses a SQLite database (`guildbot.db` by default) to store all data. Configuration is handled through `config.json` for basic bot settings and in-game commands for guild-specific settings.
+The bot uses a SQLite database (`guildbot.db` by default) to store all data. Configuration is handled through `config.json` for basic bot settings and in-game commands for guild-specific settings. You would give rights to the bot in your DISCORD server, potentially to specific channels, but when the bot is called, it expects an assignment of one game to one channel for some most methods, outside of the configuration and setup of games and channels. 
 
 ## Command Reference
 
