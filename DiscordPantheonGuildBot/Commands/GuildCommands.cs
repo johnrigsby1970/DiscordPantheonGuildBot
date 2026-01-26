@@ -580,7 +580,7 @@ public class GuildCommands {
             var members = await all.Select(m => m).ToListAsync();
 
             // var rosterText = string.Empty;
-            //
+
             // foreach(var character in roster)
             // {
             //     var guildMember = members.SingleOrDefault(m=>m.Id == character.UserId);
@@ -588,14 +588,11 @@ public class GuildCommands {
             //     rosterText += $"{character.CharacterName}, {character.Class ?? "No Class"}, {character.Level}, { guildmemberLink }\n";
             // }
 
+            var rosterLines = FormatRosterText(roster, members).Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.RemoveEmptyEntries);
             var sb = new StringBuilder();
 
-            foreach (var character in roster) {
-                var guildMember = members.SingleOrDefault(m => m.Id == character.UserId);
-                var guildmemberLink = guildMember is not null ? ("user:" + guildMember.MemberServerName()) : "Unknown";
-
-                sb.AppendLine(
-                    $"{character.CharacterName}, {character.Class ?? "No Class"}, {character.Level}, {guildmemberLink}");
+            foreach (var line in rosterLines) {
+                sb.AppendLine(line);
 
                 if (sb.Length > (1900 - $"**Guild Roster for {game.Name}".Count())) {
                     var embed = new DiscordEmbedBuilder()
@@ -631,6 +628,48 @@ public class GuildCommands {
         }
     }
 
+    private string FormatRosterText(List<Character> roster, List<DiscordMember> members) {
+        var rows = new List<string[]>();
+        var columnWidths = new int[4]; // CharacterName, Class, Level, MemberServerName
+
+        foreach (var character in roster) {
+            var guildMember = members.SingleOrDefault(m => m.Id == character.UserId);
+            var guildmemberLink = guildMember is not null ? guildMember.MemberServerName() : "Unknown";
+
+            var row = new[] {
+                character.CharacterName,
+                character.Class ?? "No Class",
+                character.Level.ToString(),
+                guildmemberLink
+            };
+            rows.Add(row);
+
+            for (int i = 0; i < row.Length; i++) {
+                if (row[i].Length > columnWidths[i]) {
+                    columnWidths[i] = row[i].Length;
+                }
+            }
+        }
+
+        var sb = new StringBuilder();
+        sb.Append("```");
+        foreach (var row in rows) {
+            for (int i = 0; i < row.Length; i++) {
+                if (i < row.Length - 1) {
+                    int width = columnWidths[i] + 5;
+                    sb.Append(row[i].PadRight(width));
+                }
+                else {
+                    sb.Append(row[i]);
+                }
+            }
+
+            sb.AppendLine();
+        }
+        sb.Append("```");
+        return sb.ToString();
+    }
+
     private async Task SetRoster(CommandContext ctx, string? filter = null, string? value = null) {
         try {
             var (hasGame, game) = await EnsureGame(ctx);
@@ -662,19 +701,18 @@ public class GuildCommands {
             var all = guild!.GetAllMembersAsync();
             var members = await all.Select(m => m).ToListAsync();
 
-            var rosterText = string.Empty;
             var rosterEntries = new List<RosterEntry>();
 
             foreach (var character in roster) {
                 var guildMember = members.SingleOrDefault(m => m.Id == character.UserId);
                 var guildmemberLink = guildMember is not null ? "" + guildMember.MemberServerName() : "Unknown";
-                rosterText +=
-                    $"{character.CharacterName}, {character.Class ?? "No Class"}, {character.Level}, {guildmemberLink}\n";
                 rosterEntries.Add(new RosterEntry() {
                     CharacterName = character.CharacterName, Member = guildmemberLink, Class = character.Class ?? "",
                     Level = character.Level.ToString()
                 });
             }
+
+            var rosterText = FormatRosterText(roster, members);
 
             if (rosterEntries.Count > 100) {
                 rosterText = "Roster is too large to display in a single message. See attached file.";

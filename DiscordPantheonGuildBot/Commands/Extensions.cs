@@ -76,7 +76,7 @@ public static class Extensions {
         // 1. Ensure the stream is at the beginning
         dataStream.Position = 0;
 
-        var textStream = ExcelConverter.XlsxToTabDelimited(dataStream);
+        var textStream = ExcelConverter.XlsxToFixedLength(dataStream); //  XlsxToTabDelimited(dataStream);
         dataStream.Position = 0;
         textStream.Position = 0;
 
