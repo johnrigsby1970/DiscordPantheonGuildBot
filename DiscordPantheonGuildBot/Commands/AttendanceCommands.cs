@@ -5,6 +5,7 @@ using DiscordPantheonGuildBot.Data;
 using DiscordPantheonGuildBot.Models;
 using System.Text;
 using System.ComponentModel;
+using DSharpPlus.Commands.ArgumentModifiers;
 using Microsoft.Extensions.Logging;
 
 namespace DiscordPantheonGuildBot.Commands;
@@ -71,11 +72,11 @@ public class AttendanceCommands {
     [Command("log")]
     [Description("Logs attendance for everyone online, in voice, or in a specific voice channel.")]
     public async Task LogAttendance(CommandContext ctx,
-        [Description("Name for the attendance record")]
-        string name,
         [Description("Scope: online, voice, or channel")]
         string scope,
-        [Description("Voice channel (if scope is channel)")]
+        [Description("Name for the attendance record")]
+        [RemainingText] string name,
+        [Description("Voice channel (if scope is channel) - can be used as first arg or after scope if mentioning")]
         DiscordChannel? channel = null) {
         try {
             var (hasGame, game) = await EnsureGame(ctx);
@@ -88,6 +89,10 @@ public class AttendanceCommands {
 
             List<ulong> userIds = new List<ulong>();
             scope = scope.ToLower();
+
+            // Handle if someone swaps scope and name? No, we follow the new order.
+            // But what if they wanted to use channel?
+            // CommandContext handles DiscordChannel if it's a mention.
 
             switch (scope) {
                 case "online":
@@ -130,7 +135,7 @@ public class AttendanceCommands {
             }
             else {
                 ctx.TimedMessageAsync(
-                        $"Failed to log attendance. Maybe a session with name '{name}' already exists for this game?")
+                    $"Failed to log attendance. Maybe a session with name '{name}' already exists for this game?")
                     .Forget();
             }
         }
@@ -148,7 +153,7 @@ public class AttendanceCommands {
     [Description("Logs attendance for specific user.")]
     public async Task AddUserAttendance(CommandContext ctx, DiscordMember member,
         [Description("Name for the attendance record")]
-        string name) {
+        [RemainingText] string name) {
         try {
             var (hasGame, game) = await EnsureGame(ctx);
             if (!hasGame) return;
@@ -182,7 +187,7 @@ public class AttendanceCommands {
     [Description("Removes attendance for specific user.")]
     public async Task RemoveUserAttendance(CommandContext ctx, DiscordMember member,
         [Description("Name for the attendance record")]
-        string name) {
+        [RemainingText] string name) {
         try {
             var (hasGame, game) = await EnsureGame(ctx);
             if (!hasGame) return;
@@ -245,7 +250,9 @@ public class AttendanceCommands {
 
     [Command("show")]
     [Description("Shows details for a specific attendance session.")]
-    public async Task ShowAttendance(CommandContext ctx, string name) {
+    public async Task ShowAttendance(
+        CommandContext ctx, 
+        [RemainingText] string name) {
         try {
             var (hasGame, game) = await EnsureGame(ctx);
             if (!hasGame) return;
@@ -292,7 +299,7 @@ public class AttendanceCommands {
     [Description("Deletes an entire attendance session and its records.")]
     public async Task DeleteSession(CommandContext ctx,
         [Description("Name of the session to delete")]
-        string name) {
+        [RemainingText] string name) {
         try {
             var (hasGame, game) = await EnsureGame(ctx);
             if (!hasGame) return;

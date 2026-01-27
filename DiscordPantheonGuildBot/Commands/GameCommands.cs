@@ -6,6 +6,7 @@ using DiscordPantheonGuildBot.Models;
 using System.Text;
 using DSharpPlus.Interactivity;
 using System.ComponentModel;
+using DSharpPlus.Commands.ArgumentModifiers;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -40,7 +41,7 @@ public class GameCommands {
     [Description("Creates a new game.")]
     public async Task CreateGame(CommandContext ctx,
         [Description("Name of a new game to add to the system.")]
-        string name) {
+        [RemainingText] string name) {
         try {
             if (!await IsAuthorized(ctx)) {
                 ctx.TimedMessageAsync("Only administrators can create games.", Constants.LongResponseDelay).Forget();
@@ -68,13 +69,11 @@ public class GameCommands {
         }
     }
 
-    [Command("setdescription")]
+    [Command("setdescriptionbygamename")]
     [Description("Sets the description of a game.")]
-    public async Task SetDescription(CommandContext ctx, 
-        [Description("Game name or id to set description for.")]
-        string gameIdOrName, 
-        [Description("New description for the game.")]
-        string description) {
+    public async Task SetDescriptionByGameName(CommandContext ctx,
+        [Description("The game name and description (e.g., !game setdescription My Game New description)")]
+        [RemainingText] string args) {
         try {
             if (!await IsAuthorized(ctx)) {
                 ctx.TimedMessageAsync("Only administrators can set game descriptions.",
@@ -82,9 +81,46 @@ public class GameCommands {
                 return;
             }
 
-            var game = await ResolveGame(ctx, gameIdOrName);
+            var parts = args.Split(' ', StringSplitOptions.RemoveEmptyEntries).ToList();
+            if (parts.Count < 2) {
+                ctx.TimedMessageAsync("Invalid format. Expected: `!game setdescription <name> <description>`",
+                    Constants.LongResponseDelay).Forget();
+                return;
+            }
+
+            // Game names cannot start with a number for this command.
+            if (char.IsDigit(parts[0][0])) {
+                ctx.TimedMessageAsync("Game names cannot start with a number. Use `setdescriptionid` to use a game ID.",
+                    Constants.LongResponseDelay).Forget();
+                return;
+            }
+
+            var games = await Database.ListGames(ctx.Guild!.Id);
+            Game? game = null;
+            string description = "";
+
+            // Try to match game name from the start of the args
+            // We'll iterate through all games and see if args starts with their name
+            var matchedGames = games.Where(g => args.StartsWith(g.Name, StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(g => g.Name.Length).ToList();
+
+            foreach (var g in matchedGames) {
+                // Ensure it's a full word match
+                if (args.Length == g.Name.Length || args[g.Name.Length] == ' ') {
+                    game = g;
+                    description = args.Substring(g.Name.Length).Trim();
+                    break;
+                }
+            }
+
             if (game == null) {
-                ctx.TimedMessageAsync("Game not found.", Constants.LongResponseDelay).Forget();
+                ctx.TimedMessageAsync("Game not found. Ensure the game name is correct and does not start with a number.",
+                    Constants.LongResponseDelay).Forget();
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(description)) {
+                ctx.TimedMessageAsync("Description cannot be empty.", Constants.LongResponseDelay).Forget();
                 return;
             }
 
@@ -93,7 +129,8 @@ public class GameCommands {
                 await chn.ModifyAsync(x => x.Topic = description);
             }
             catch (Exception ex) {
-                ctx.TimedMessageAsync($"Failed to update channel topic: {ex.Message}", Constants.LongResponseDelay).Forget();
+                ctx.TimedMessageAsync($"Failed to update channel topic: {ex.Message}", Constants.LongResponseDelay)
+                    .Forget();
                 return;
             }
 
@@ -115,13 +152,162 @@ public class GameCommands {
         }
     }
 
-    [Command("setwelcome")]
+    [Command("setdescriptionbygameid")]
+    [Description("Sets the description of a game using its ID.")]
+    public async Task SetDescriptionByGameId(CommandContext ctx,
+        [Description("ID of the game to set description for.")]
+        int gameId,
+        [Description("New description for the game.")]
+        [RemainingText] string description) {
+        try {
+            if (!await IsAuthorized(ctx)) {
+                ctx.TimedMessageAsync("Only administrators can set game descriptions.",
+                    Constants.LongResponseDelay).Forget();
+                return;
+            }
+
+            var game = await Database.GetGame(ctx.Guild!.Id, gameId);
+            if (game == null) {
+                ctx.TimedMessageAsync($"Game with ID {gameId} not found.", Constants.LongResponseDelay).Forget();
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(description)) {
+                ctx.TimedMessageAsync("Description cannot be empty.", Constants.LongResponseDelay).Forget();
+                return;
+            }
+
+            try {
+                var chn = await ctx.Client.GetChannelAsync(ctx.Channel.Id);
+                await chn.ModifyAsync(x => x.Topic = description);
+            }
+            catch (Exception ex) {
+                ctx.TimedMessageAsync($"Failed to update channel topic: {ex.Message}", Constants.LongResponseDelay)
+                    .Forget();
+                return;
+            }
+
+            bool success = await Database.UpdateGameDescription(game.Id, description);
+            if (success) {
+                ctx.TimedMessageAsync($"Description updated for game '{game.Name}'.").Forget();
+            }
+            else {
+                ctx.TimedMessageAsync("Failed to update description.").Forget();
+            }
+        }
+        catch (Exception ex) {
+            Logger.LogError(ex, "Error SetDescriptionById.");
+        }
+        finally {
+            if (ctx is TextCommandContext textCtx) {
+                await textCtx.Message.SafeDeleteAsync();
+            }
+        }
+    }
+
+    [Command("setdescription")]
+    [Description("Sets the description of a game using its ID.")]
+    public async Task SetDescription(CommandContext ctx,
+        [Description("New description for the game asociated with current channel.")]
+        [RemainingText] string description) {
+        try {
+            if (!await IsAuthorized(ctx)) {
+                ctx.TimedMessageAsync("Only administrators can set game descriptions.",
+                    Constants.LongResponseDelay).Forget();
+                return;
+            }
+            
+            var (hasGame, game) = await EnsureGame(ctx);
+            if (!hasGame || game is null) return;
+
+            if (string.IsNullOrWhiteSpace(description)) {
+                ctx.TimedMessageAsync("Description cannot be empty.", Constants.LongResponseDelay).Forget();
+                return;
+            }
+
+            try {
+                var chn = await ctx.Client.GetChannelAsync(ctx.Channel.Id);
+                await chn.ModifyAsync(x => x.Topic = description);
+            }
+            catch (Exception ex) {
+                ctx.TimedMessageAsync($"Failed to update channel topic: {ex.Message}", Constants.LongResponseDelay)
+                    .Forget();
+                return;
+            }
+
+            bool success = await Database.UpdateGameDescription(game.Id, description);
+            if (success) {
+                ctx.TimedMessageAsync($"Description updated for game '{game.Name}'.").Forget();
+            }
+            else {
+                ctx.TimedMessageAsync("Failed to update description.").Forget();
+            }
+        }
+        catch (Exception ex) {
+            Logger.LogError(ex, "Error SetDescriptionById.");
+        }
+        finally {
+            if (ctx is TextCommandContext textCtx) {
+                await textCtx.Message.SafeDeleteAsync();
+            }
+        }
+    }
+    
+    private async Task<(bool, Game?)> EnsureGame(CommandContext ctx) {
+        var game = await Database.GetGameByChannel(ctx.Channel.Id);
+        if (game == null) {
+            ctx.TimedMessageAsync(
+                "This channel is not assigned to any game. Use `!game assignchannel <name>` first.",
+                Constants.LongResponseDelay).Forget();
+            return (false, null);
+        }
+
+        return (true, game);
+    }
+    
+     [Command("setwelcome")]
     [Description("Sets the welcome message of a game.")]
-    public async Task SetWelcome(CommandContext ctx, 
-        [Description("Game name or id to set welcome message for.")]
-        string gameIdOrName, 
-        [Description("Message to display when a new player joins the game.")]
-        string welcomeMessage) {
+    public async Task SetWelcome(CommandContext ctx,
+        [Description("The welcome message for game associated with current channel (e.g., !game setwelcome Welcome to the team!)")]
+        [RemainingText] string? welcomeMessage) {
+        try {
+            if (!await IsAuthorized(ctx)) {
+                ctx.TimedMessageAsync("Only administrators can set game welcome messages.",
+                    Constants.LongResponseDelay).Forget();
+                return;
+            }
+            
+            var (hasGame, game) = await EnsureGame(ctx);
+            if (!hasGame || game is null) return;
+
+            if (string.IsNullOrWhiteSpace(welcomeMessage)) {
+                ctx.TimedMessageAsync("Welcome message cannot be empty.", Constants.LongResponseDelay).Forget();
+                return;
+            }
+
+            bool success = await Database.UpdateGameWelcomeMessage(game.Id, welcomeMessage);
+            if (success) {
+                ctx.TimedMessageAsync($"Welcome message updated for game '{game.Name}'.").Forget();
+            }
+            else {
+                ctx.TimedMessageAsync("Failed to update welcome message.").Forget();
+            }
+        }
+        catch (Exception ex) {
+            Logger.LogError(ex, "Error SetWelcome.");
+        }
+        finally {
+            if (ctx is TextCommandContext textCtx) {
+                await textCtx.Message.SafeDeleteAsync();
+            }
+        }
+    }
+    
+    [Command("setwelcomebygamename")]
+    [Description("Sets the welcome message of a game.")]
+    public async Task SetWelcomeByGameName(CommandContext ctx,
+        [Description("The game name and welcome message (e.g., !game setwelcome My Game Welcome to the team!)")]
+        [RemainingText] string args) {
         try {
             if (!await IsAuthorized(ctx)) {
                 ctx.TimedMessageAsync("Only administrators can set game welcome messages.",
@@ -129,9 +315,44 @@ public class GameCommands {
                 return;
             }
 
-            var game = await ResolveGame(ctx, gameIdOrName);
+            var parts = args.Split(' ', StringSplitOptions.RemoveEmptyEntries).ToList();
+            if (parts.Count < 2) {
+                ctx.TimedMessageAsync("Invalid format. Expected: `!game setwelcome <name> <message>`",
+                    Constants.LongResponseDelay).Forget();
+                return;
+            }
+
+            // Game names cannot start with a number for this command.
+            if (char.IsDigit(parts[0][0])) {
+                ctx.TimedMessageAsync("Game names cannot start with a number. Use `setwelcomeid` to use a game ID.",
+                    Constants.LongResponseDelay).Forget();
+                return;
+            }
+
+            var games = await Database.ListGames(ctx.Guild!.Id);
+            Game? game = null;
+            string welcomeMessage = "";
+
+            // Try to match game name from the start of the args
+            var matchedGames = games.Where(g => args.StartsWith(g.Name, StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(g => g.Name.Length).ToList();
+
+            foreach (var g in matchedGames) {
+                if (args.Length == g.Name.Length || args[g.Name.Length] == ' ') {
+                    game = g;
+                    welcomeMessage = args.Substring(g.Name.Length).Trim();
+                    break;
+                }
+            }
+
             if (game == null) {
-                ctx.TimedMessageAsync("Game not found.", Constants.LongResponseDelay).Forget();
+                ctx.TimedMessageAsync("Game not found. Ensure the game name is correct and does not start with a number.",
+                    Constants.LongResponseDelay).Forget();
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(welcomeMessage)) {
+                ctx.TimedMessageAsync("Welcome message cannot be empty.", Constants.LongResponseDelay).Forget();
                 return;
             }
 
@@ -153,11 +374,81 @@ public class GameCommands {
         }
     }
 
+    [Command("setwelcomebygameid")]
+    [Description("Sets the welcome message of a game using its ID.")]
+    public async Task SetWelcomeById(CommandContext ctx,
+        [Description("ID of the game to set welcome message for.")]
+        int gameId,
+        [Description("New welcome message for the game.")]
+        [RemainingText] string welcomeMessage) {
+        try {
+            if (!await IsAuthorized(ctx)) {
+                ctx.TimedMessageAsync("Only administrators can set game welcome messages.",
+                    Constants.LongResponseDelay).Forget();
+                return;
+            }
+
+            var game = await Database.GetGame(ctx.Guild!.Id, gameId);
+            if (game == null) {
+                ctx.TimedMessageAsync($"Game with ID {gameId} not found.", Constants.LongResponseDelay).Forget();
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(welcomeMessage)) {
+                ctx.TimedMessageAsync("Welcome message cannot be empty.", Constants.LongResponseDelay).Forget();
+                return;
+            }
+
+            bool success = await Database.UpdateGameWelcomeMessage(game.Id, welcomeMessage);
+            if (success) {
+                ctx.TimedMessageAsync($"Welcome message updated for game '{game.Name}'.").Forget();
+            }
+            else {
+                ctx.TimedMessageAsync("Failed to update welcome message.").Forget();
+            }
+        }
+        catch (Exception ex) {
+            Logger.LogError(ex, "Error SetWelcomeById.");
+        }
+        finally {
+            if (ctx is TextCommandContext textCtx) {
+                await textCtx.Message.SafeDeleteAsync();
+            }
+        }
+    }
+    
     [Command("showwelcome")]
     [Description("Shows the welcome message for a game.")]
     public async Task ShowWelcome(CommandContext ctx, 
         [Description("Game name or id to show welcome message for. If left empty, will show welcome message for current channel's game.")]
-        string? gameIdOrName = null) {
+        [RemainingText] string? gameIdOrName = null) {
+        try {
+            var (hasGame, game) = await EnsureGame(ctx);
+            if (!hasGame || game is null) return;
+            
+            if (string.IsNullOrEmpty(game.WelcomeMessage)) {
+                ctx.TimedMessageAsync($"No welcome message set for game '{game.Name}'.").Forget();
+            }
+            else {
+                ctx.TimedMessageAsync($"**Welcome Message for {game.Name}:**\n{game.WelcomeMessage}",
+                    Constants.ListResponseDelay).Forget();
+            }
+        }
+        catch (Exception ex) {
+            Logger.LogError(ex, "Error ShowWelcome.");
+        }
+        finally {
+            if (ctx is TextCommandContext textCtx) {
+                await textCtx.Message.SafeDeleteAsync();
+            }
+        }
+    }
+    
+    [Command("showwelcomebygameiforname")]
+    [Description("Shows the welcome message for a game.")]
+    public async Task ShowWelcomeByGameIfOrName(CommandContext ctx, 
+        [Description("Game name or id to show welcome message for. If left empty, will show welcome message for current channel's game.")]
+        [RemainingText] string? gameIdOrName = null) {
         try {
             Game? game;
             if (string.IsNullOrEmpty(gameIdOrName)) {
@@ -197,7 +488,7 @@ public class GameCommands {
     [Description("Assigns the current channel to a game.")]
     public async Task AssignChannel(CommandContext ctx, 
         [Description("Game name or id to assign to current channel.")]
-        string gameIdOrName) {
+        [RemainingText] string gameIdOrName) {
         try {
             if (!await IsAuthorized(ctx)) {
                 ctx.TimedMessageAsync("Only administrators can assign channels.").Forget();
@@ -319,7 +610,7 @@ public class GameCommands {
     [Description("Shows game description.")]
     public async Task DescribeGame(CommandContext ctx, 
         [Description("Game name or id to describe. If left empty, will describe channel game.")]
-        string? gameIdOrName = null) {
+        [RemainingText] string? gameIdOrName = null) {
         try {
             Game? game;
             if (string.IsNullOrEmpty(gameIdOrName)) {
@@ -355,7 +646,7 @@ public class GameCommands {
     [Description("Deletes a game.")]
     public async Task DeleteGame(CommandContext ctx, 
         [Description("Game name or id to remove from the list of games.")]
-        string gameIdOrName) {
+        [RemainingText] string gameIdOrName) {
         try {
             if (!await IsAuthorized(ctx)) {
                 ctx.TimedMessageAsync("Only administrators can delete games.").Forget();
@@ -395,7 +686,7 @@ public class GameCommands {
 
     [Command("listchannels")]
     [Description("Lists all channels assigned to a game.")]
-    public async Task ListChannels(CommandContext ctx, string gameIdOrName) {
+    public async Task ListChannels(CommandContext ctx,  [RemainingText] string gameIdOrName) {
         try {
             var game = await ResolveGame(ctx, gameIdOrName);
             if (game == null) {
@@ -430,7 +721,7 @@ public class GameCommands {
 
     [Command("unassignallchannels")]
     [Description("Unassigns all channels from a game.")]
-    public async Task UnassignAllChannels(CommandContext ctx, string gameIdOrName) {
+    public async Task UnassignAllChannels(CommandContext ctx, [RemainingText] string gameIdOrName) {
         try {
             if (!await IsAuthorized(ctx)) {
                 ctx.TimedMessageAsync("Only administrators can unassign channels.").Forget();
