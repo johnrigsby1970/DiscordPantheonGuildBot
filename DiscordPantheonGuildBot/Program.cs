@@ -35,10 +35,6 @@ internal class Program {
             return;
         }
         
-        // var serviceCollection = new ServiceCollection()
-        //     .AddSingleton(new DatabaseService())
-        //     .AddLogging(v => v.AddConsole().SetMinimumLevel(LogLevel.Debug));
-        
         var builder = DiscordClientBuilder.CreateDefault(settingsReader.Token, DiscordIntents.AllUnprivileged 
                                                                               | DiscordIntents.GuildMembers 
                                                                               | DiscordIntents.MessageContents 
@@ -76,8 +72,6 @@ internal class Program {
 
         
         Client = builder.Build();
-
-        //Client. += Client_Ready;
         
         try {
             await Client.ConnectAsync();

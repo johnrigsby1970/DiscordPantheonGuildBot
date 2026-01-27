@@ -4,6 +4,7 @@ using DSharpPlus.Commands;
 using DSharpPlus.Entities;
 using DiscordPantheonGuildBot.Data;
 using DiscordPantheonGuildBot.Models;
+using DSharpPlus.Commands.ArgumentModifiers;
 using DSharpPlus.Commands.Processors.TextCommands;
 using DSharpPlus.Interactivity;
 using Microsoft.Extensions.DependencyInjection;
@@ -13,11 +14,11 @@ namespace DiscordPantheonGuildBot.Commands;
 
 public class GuildCommands {
     public DatabaseService Database { get; }
-    private ILogger<GameCommands> _logger { get; set; }
+    private ILogger<GameCommands> Logger { get; set; }
 
     public GuildCommands(DatabaseService database, ILogger<GameCommands> logger) {
         Database = database;
-        _logger = logger;
+        Logger = logger;
     }
 
     private async Task<(bool, Game?)> EnsureGame(CommandContext ctx) {
@@ -83,7 +84,7 @@ public class GuildCommands {
             ctx.TimedMessageAsync($"Yes, my tools are available at the moment. What is it that you need?").Forget();
         }
         catch (Exception ex) {
-            _logger.LogError(ex, "Error CanConnect.");
+            Logger.LogError(ex, "Error CanConnect.");
         }
         finally {
             if (ctx is TextCommandContext textCtx) {
@@ -104,7 +105,7 @@ public class GuildCommands {
         try {
             if (ctx.Guild is null) return;
             if (ctx.Member is null) return;
-            
+
             if (!await Database.CanConnect()) {
                 ctx.TimedMessageAsync(
                         $"This is not my day. I can't seem to find any of my tools. I'm sorry {ctx.Member.MemberServerName()}, but I won't be able to help until I find them.")
@@ -125,7 +126,7 @@ public class GuildCommands {
                 .Forget();
         }
         catch (Exception ex) {
-            _logger.LogError(ex, "Error Ping.");
+            Logger.LogError(ex, "Error Ping.");
         }
         finally {
             if (ctx is TextCommandContext textCtx) {
@@ -137,15 +138,53 @@ public class GuildCommands {
     // !add Synn Wizard 11
     [Command("add")]
     [Description("Adds a character to your user. Will also update if found.")]
-    public async Task AddCharacter(CommandContext ctx, string name, string? @class = null, int level = 1) {
+    public async Task AddCharacter(CommandContext ctx,
+        [RemainingText] string args)
+        // [Description("The name of the character.")]
+        // string name,
+        // [Description("The class of the character.")]
+        // string? @class = null,
+        // [Description("The level of the character.")]
+        // int level = 1) 
+        {
         try {
             var (hasGame, game) = await EnsureGame(ctx);
             if (!hasGame) return;
 
+            int? level = null;
             if (!await IsAuthorized(ctx, "member", game!.Id)) {
-                await ctx.RespondAsync("You must be a member to add characters.");
+                await ctx.TimedMessageAsync("You must be a member to add characters.");
                 return;
             }
+
+            string? @class = null;
+            
+            var parts = args.Split(' ', StringSplitOptions.RemoveEmptyEntries).ToList();
+            if (int.TryParse(parts.Last(), out _)) {
+                level = int.Parse(parts.Last());
+                parts.RemoveAt(parts.Count - 1);
+            }
+            args = string.Join(' ', parts);
+            string nameArgs = args;
+
+            var allowedClasses = await Database.GetAllowedClasses(game.Id);
+            allowedClasses = allowedClasses.OrderByDescending(c => c.Length).ToList();
+
+            foreach (var allowedClass in allowedClasses) {
+                if (args.EndsWith(allowedClass, StringComparison.OrdinalIgnoreCase)) {
+                    @class = allowedClass;
+                    // Ensure there's a space before the class name or it's the start of the string
+                    int index = args.LastIndexOf(allowedClass, StringComparison.OrdinalIgnoreCase);
+                    if (index == 0 || args[index - 1] == ' ') {
+                        nameArgs = args.Substring(0, index).Trim();
+                        break;
+                    }
+
+                    @class = null; // Reset if it was a false match
+                }
+            }
+
+            var name = nameArgs.Trim();
 
             // If @class is a number, it means the class was omitted and the number is the level
             if (!string.IsNullOrEmpty(@class) && int.TryParse(@class, out int parsedLevel)) {
@@ -153,35 +192,36 @@ public class GuildCommands {
                 @class = null;
             }
 
-            if (!string.IsNullOrEmpty(@class)) {
-                var allowedClasses = await Database.GetAllowedClasses(game.Id);
-                var matchingClass =
-                    allowedClasses.FirstOrDefault(c => string.Equals(c, @class, StringComparison.OrdinalIgnoreCase));
-
-                if (matchingClass == null) {
-                    ctx.TimedMessageAsync(
-                        $"'{@class}' is not an allowed class for game '{game.Name}'. Use `!config listclasses` to see allowed classes.",
-                        Constants.LongResponseDelay).Forget();
-                    return;
-                }
-
-                @class = matchingClass; // Use the properly cased version from DB
-            }
-
+            // if (!string.IsNullOrEmpty(@class)) {
+            //     var allowedClasses = await Database.GetAllowedClasses(game.Id);
+            //     var matchingClass =
+            //         allowedClasses.FirstOrDefault(c => string.Equals(c, @class, StringComparison.OrdinalIgnoreCase));
+            //
+            //     if (matchingClass == null) {
+            //         ctx.TimedMessageAsync(
+            //             $"'{@class}' is not an allowed class for game '{game.Name}'. Use `!config listclasses` to see allowed classes.",
+            //             Constants.LongResponseDelay).Forget();
+            //         return;
+            //     }
+            //
+            //     @class = matchingClass; // Use the properly cased version from DB
+            // }
+            
+            if (!level.HasValue) level = 1;
             var character = new Character {
                 GuildId = ctx.Guild!.Id,
                 GameId = game.Id,
                 UserId = ctx.User.Id,
                 CharacterName = name,
                 Class = @class,
-                Level = level
+                Level = level??1
             };
 
             // Check if this is their first character in this game
             var existingCharacters = await Database.GetUserCharacters(game.Id, ctx.User.Id);
-            bool isFirstCharacter = existingCharacters.Count == 0;
+            var isFirstCharacter = existingCharacters.Count == 0;
 
-            bool success = await Database.AddCharacter(character);
+            var success = await Database.AddCharacter(character);
             if (success) {
                 await SetRoster(ctx);
                 if (isFirstCharacter && !string.IsNullOrEmpty(game.WelcomeMessage)) {
@@ -200,7 +240,7 @@ public class GuildCommands {
             }
         }
         catch (Exception ex) {
-            _logger.LogError(ex, "Error AddCharacter.");
+            Logger.LogError(ex, "Error AddCharacter.");
         }
         finally {
             if (ctx is TextCommandContext textCtx) {
@@ -212,8 +252,17 @@ public class GuildCommands {
     // !update Synn Wizard 11
     [Command("update")]
     [Description("Updates a character for your user. Will also Add if not found.")]
-    public async Task UpdateCharacter(CommandContext ctx, string name, string? @class = null, int level = 1) {
-        await AddCharacter(ctx, name, @class, level);
+    public async Task UpdateCharacter(CommandContext ctx,
+        [RemainingText] string args
+        // [Description("The name of the character.")]
+        // string name,
+        // [Description("The class of the character.")]
+        // string? @class = null,
+        // [Description("The level of the character.")]
+        // int level = 1
+            ) {
+        await AddCharacter(ctx, args);
+        //await AddCharacter(ctx, name, @class, level);
         // try {
         //     var (hasGame, game) = await EnsureGame(ctx);
         //     if (!hasGame) return;
@@ -287,19 +336,32 @@ public class GuildCommands {
     // !level Synn 11
     [Command("level")]
     [Description("Changes a character's level.")]
-    public async Task ChangeLevel(CommandContext ctx, string name, int level = 0) {
+    public async Task ChangeLevel(CommandContext ctx,
+        [Description("The character name and new level (e.g., !level Synn 11 or !level Great Name 11)")]
+        [RemainingText] string args) {
         try {
             var (hasGame, game) = await EnsureGame(ctx);
             if (!hasGame) return;
 
-            if (level <= 0) {
+            var parts = args.Split(' ', StringSplitOptions.RemoveEmptyEntries).ToList();
+            if (parts.Count < 2) {
                 ctx.TimedMessageAsync(
-                    "Invalid level. Expected format: `!level <name> <level>` (e.g., `!level Synn 11`)",
+                    "Invalid format. Expected: `!level <name> <level>` (e.g., `!level Synn 11`)",
                     Constants.LongResponseDelay).Forget();
                 return;
             }
 
-            bool success = await Database.UpdateCharacterLevel(game!.Id, ctx.User.Id, name, level);
+            if (!int.TryParse(parts.Last(), out int level) || level <= 0) {
+                ctx.TimedMessageAsync(
+                    "Invalid level. Level must be a positive number at the end of the command.",
+                    Constants.LongResponseDelay).Forget();
+                return;
+            }
+
+            parts.RemoveAt(parts.Count - 1);
+            string name = string.Join(' ', parts);
+
+            var success = await Database.UpdateCharacterLevel(game!.Id, ctx.User.Id, name, level);
 
             if (success) {
                 await SetRoster(ctx);
@@ -310,7 +372,7 @@ public class GuildCommands {
             }
         }
         catch (Exception ex) {
-            _logger.LogError(ex, "Error ChangeLevel.");
+            Logger.LogError(ex, "Error ChangeLevel.");
         }
         finally {
             if (ctx is TextCommandContext textCtx) {
@@ -324,10 +386,8 @@ public class GuildCommands {
     public async Task DescribeGame(CommandContext ctx) {
         try {
             var (hasGame, game) = await EnsureGame(ctx);
-            if (!hasGame) return;
 
-            game = await Database.GetGameByChannel(ctx.Channel.Id);
-            if (game == null) {
+            if (!hasGame || game is null) {
                 ctx.TimedMessageAsync("This channel is not assigned to any game.").Forget();
                 return;
             }
@@ -337,7 +397,7 @@ public class GuildCommands {
             ctx.TimedMessageAsync(sb.ToString(), Constants.ListResponseDelay).Forget();
         }
         catch (Exception ex) {
-            _logger.LogError(ex, "Error DescribeGame.");
+            Logger.LogError(ex, "Error DescribeGame.");
         }
         finally {
             if (ctx is TextCommandContext textCtx) {
@@ -349,7 +409,9 @@ public class GuildCommands {
     // !remove Synn or !remove
     [Command("remove")]
     [Description("Removes one or all of your characters for the current game.")]
-    public async Task RemoveCharacter(CommandContext ctx, string? name = null) {
+    public async Task RemoveCharacter(CommandContext ctx,
+        [Description("The name of the character to remove. If omitted, prompts to remove all characters.")]
+        [RemainingText] string? name = null) {
         try {
             var (hasGame, game) = await EnsureGame(ctx);
             if (!hasGame) return;
@@ -363,19 +425,19 @@ public class GuildCommands {
 
                 await ctx.RespondAsync(builder);
                 var challenge = await ctx.GetResponseAsync();
-                //var response =
-                //    await interactivity.WaitForMessageAsync(x => x.Author.Id == ctx.User.Id, TimeSpan.FromSeconds(30));
+                
                 var response =
-                    await interactivity.WaitForMessageAsync(x => x.Author is not null && x.Author.Id == ctx.User.Id, TimeSpan.FromSeconds(30));
+                    await interactivity.WaitForMessageAsync(x => x.Author is not null && x.Author.Id == ctx.User.Id,
+                        TimeSpan.FromSeconds(30));
 
                 if (!response.TimedOut && response.Result.Content.ToLower() == "yes") {
-                    if(challenge is not null) await challenge.DeleteAsync();
-                    int count = await Database.RemoveAllCharacters(game.Id, ctx.User.Id);
+                    if (challenge is not null) await challenge.DeleteAsync();
+                    var count = await Database.RemoveAllCharacters(game.Id, ctx.User.Id);
                     ctx.TimedMessageAsync(
                         $"Removed all {count} characters for you in game '{game.Name}'.").Forget();
                 }
                 else {
-                    if(challenge is not null) await challenge.DeleteAsync();
+                    if (challenge is not null) await challenge.DeleteAsync();
                     ctx.TimedMessageAsync("Action cancelled or timed out. No characters removed.").Forget();
                 }
 
@@ -390,11 +452,12 @@ public class GuildCommands {
                 await ctx.RespondAsync(builder);
                 var challenge = await ctx.GetResponseAsync();
                 var response =
-                    await interactivity.WaitForMessageAsync(x => x.Author is not null && x.Author.Id == ctx.User.Id, TimeSpan.FromSeconds(30));
+                    await interactivity.WaitForMessageAsync(x => x.Author is not null && x.Author.Id == ctx.User.Id,
+                        TimeSpan.FromSeconds(30));
 
                 if (!response.TimedOut && response.Result.Content.ToLower() == "yes") {
-                    if(challenge is not null) await challenge.DeleteAsync();
-                    bool success = await Database.RemoveCharacter(game.Id, ctx.User.Id, name);
+                    if (challenge is not null) await challenge.DeleteAsync();
+                    var success = await Database.RemoveCharacter(game.Id, ctx.User.Id, name);
                     if (success) {
                         await SetRoster(ctx);
                         ctx.TimedMessageAsync(
@@ -405,7 +468,7 @@ public class GuildCommands {
                     }
                 }
                 else {
-                    if(challenge is not null) await challenge.DeleteAsync();
+                    if (challenge is not null) await challenge.DeleteAsync();
                     ctx.TimedMessageAsync("Action cancelled or timed out. No characters removed.").Forget();
                 }
 
@@ -413,7 +476,7 @@ public class GuildCommands {
             }
         }
         catch (Exception ex) {
-            _logger.LogError(ex, "Error RemoveCharacter.");
+            Logger.LogError(ex, "Error RemoveCharacter.");
         }
         finally {
             if (ctx is TextCommandContext textCtx) {
@@ -425,7 +488,9 @@ public class GuildCommands {
     // !list or !list Synn
     [Command("list")]
     [Description("Lists your characters or characters with a specific name for the current game.")]
-    public async Task ListCharacters(CommandContext ctx, string? name = null) {
+    public async Task ListCharacters(CommandContext ctx,
+        [Description("The name of the character to search for. If omitted, lists all your characters.")]
+        [RemainingText] string? name = null) {
         try {
             var (hasGame, game) = await EnsureGame(ctx);
             if (!hasGame) return;
@@ -457,7 +522,7 @@ public class GuildCommands {
             }
         }
         catch (Exception ex) {
-            _logger.LogError(ex, "Error ListCharacters.");
+            Logger.LogError(ex, "Error ListCharacters.");
         }
         finally {
             if (ctx is TextCommandContext textCtx) {
@@ -469,7 +534,7 @@ public class GuildCommands {
     // !roster, !roster class, !roster class Cleric, !roster level, !roster level 10-20
     [Command("setroster")]
     [Description("Shows the guild roster with various filters and ordering for the current game.")]
-    public async Task ShowRoster(CommandContext ctx, string? filter = null, string? value = null) {
+    public async Task ShowRoster(CommandContext ctx) {
         try {
             var (hasGame, game) = await EnsureGame(ctx);
             if (!hasGame) return;
@@ -479,58 +544,10 @@ public class GuildCommands {
                 return;
             }
 
-            await SetRoster(ctx, filter, value);
-            // var (hasGame, game) = await EnsureGame(ctx);
-            // if (!hasGame) return;
-            //
-            // string? orderBy = null;
-            // string? filterClass = null;
-            // int? minLevel = null;
-            // int? maxLevel = null;
-            //
-            // if (filter == "class") {
-            //     orderBy = "class";
-            //     filterClass = value;
-            // }
-            // else if (filter == "level") {
-            //     orderBy = "level";
-            //     if (!string.IsNullOrEmpty(value) && value.Contains("-")) {
-            //         var parts = value.Split('-');
-            //         if (parts.Length == 2 && int.TryParse(parts[0], out int min) &&
-            //             int.TryParse(parts[1], out int max)) {
-            //             minLevel = min;
-            //             maxLevel = max;
-            //         }
-            //     }
-            // }
-            //
-            // var roster = await Database.GetRoster(game!.Id, orderBy, filterClass, minLevel, maxLevel);
-            // if (roster.Count == 0) {
-            //     await ctx.TimedMessageAsync($"Roster is empty for game '{game.Name}'.");
-            //     return;
-            // }
-            //
-            // var rosterText = string.Join("\n",
-            //     roster.Select(c => $"{c.CharacterName}, {c.Class ?? "No Class"}, Level {c.Level}"));
-            // //var message = await ctx.RespondAsync($"**Guild Roster for {game.Name}:**\n{rosterText}");
-            //
-            // var pins = await ctx.Channel.GetPinnedMessagesAsync();
-            // var found = false;
-            // foreach (var pin in pins) {
-            //     if(pin.Content.Contains($"**Guild Roster for {game.Name}")){
-            //        // await pin.UnpinAsync();
-            //        found = true;
-            //        await pin.ModifyAsync(msg => msg.Content = $"**Guild Roster for {game.Name}:**\n{rosterText}");
-            //     }
-            // }
-            //
-            // if (!found) {
-            //     var message = await ctx.RespondAsync($"**Guild Roster for {game.Name}:**\n{rosterText}");
-            //     await message.PinAsync(); // Then pin
-            // }
+            await SetRoster(ctx);
         }
         catch (Exception ex) {
-            _logger.LogError(ex, "Error ShowRoster.");
+            Logger.LogError(ex, "Error ShowRoster.");
         }
         finally {
             if (ctx is TextCommandContext textCtx) {
@@ -542,7 +559,11 @@ public class GuildCommands {
     // !roster, !roster class, !roster class Cleric, !roster level, !roster level 10-20
     [Command("roster")]
     [Description("Shows the guild roster with various filters and ordering for the current game.")]
-    public async Task ShowFilteredRoster(CommandContext ctx, string? filter = null, string? value = null) {
+    public async Task ShowFilteredRoster(CommandContext ctx,
+        [Description("The filter to apply (e.g., 'class', 'level').")]
+        string? filter = null,
+        [Description("The value for the filter (e.g., 'Cleric', '10-20').")]
+        string? value = null) {
         try {
             var (hasGame, game) = await EnsureGame(ctx);
             if (!hasGame) return;
@@ -579,16 +600,8 @@ public class GuildCommands {
             var all = guild!.GetAllMembersAsync();
             var members = await all.Select(m => m).ToListAsync();
 
-            // var rosterText = string.Empty;
-
-            // foreach(var character in roster)
-            // {
-            //     var guildMember = members.SingleOrDefault(m=>m.Id == character.UserId);
-            //     var guildmemberLink = guildMember!=null ? (guildMember?.DisplayName + $" (<@{guildMember.Id}>)") : "Unknown";
-            //     rosterText += $"{character.CharacterName}, {character.Class ?? "No Class"}, {character.Level}, { guildmemberLink }\n";
-            // }
-
-            var rosterLines = FormatRosterText(roster, members).Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+            var rosterLines = FormatRosterText(roster, members)
+                .Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.RemoveEmptyEntries);
             var sb = new StringBuilder();
 
             foreach (var line in rosterLines) {
@@ -597,7 +610,7 @@ public class GuildCommands {
                 if (sb.Length > (1900 - $"**Guild Roster for {game.Name}".Count())) {
                     var embed = new DiscordEmbedBuilder()
                         .WithTitle($"**Guild Roster for {game.Name}")
-                        .WithDescription(sb.ToString()) // Show first 10 for example
+                        .WithDescription(sb.ToString()) // Show the first 10, for example
                         .WithColor(DiscordColor.CornflowerBlue)
                         .Build();
                     var content = new DiscordMessageBuilder().AddEmbed(embed);
@@ -610,7 +623,7 @@ public class GuildCommands {
             if (sb.Length > 0) {
                 var embed = new DiscordEmbedBuilder()
                     .WithTitle($"**Guild Roster for {game.Name}")
-                    .WithDescription(sb.ToString()) // Show first 10 for example
+                    .WithDescription(sb.ToString()) // Show the first 10, for example
                     .WithColor(DiscordColor.CornflowerBlue)
                     .Build();
                 var content = new DiscordMessageBuilder().AddEmbed(embed);
@@ -619,7 +632,151 @@ public class GuildCommands {
             }
         }
         catch (Exception ex) {
-            _logger.LogError(ex, "Error ShowFilteredRoster.");
+            Logger.LogError(ex, "Error ShowFilteredRoster.");
+        }
+        finally {
+            if (ctx is TextCommandContext textCtx) {
+                await textCtx.Message.SafeDeleteAsync();
+            }
+        }
+    }
+
+    // !roster, !roster class, !roster class Cleric, !roster level, !roster level 10-20
+    [Command("levelroster")]
+    [Description("Shows the guild roster for the current game filtered by level.")]
+    public async Task ShowFilteredRosterByLevel(CommandContext ctx,
+        [Description("The value for the filter (e.g., '10-20').")]
+        string? value = null) {
+        try {
+            var (hasGame, game) = await EnsureGame(ctx);
+            if (!hasGame) return;
+
+            string? filterClass = null;
+            int? minLevel = null;
+            int? maxLevel = null;
+            
+            var orderBy = "level";
+            if (!string.IsNullOrEmpty(value) && value.Contains("-")) {
+                var parts = value.Split('-');
+                if (parts.Length == 2 && int.TryParse(parts[0], out int min) &&
+                    int.TryParse(parts[1], out int max)) {
+                    minLevel = min;
+                    maxLevel = max;
+                }
+            }
+            
+            var roster = await Database.GetRoster(game!.Id, orderBy, filterClass, minLevel, maxLevel);
+            if (roster.Count == 0) {
+                ctx.TimedMessageAsync($"Roster is empty for game '{game.Name}'.").Forget();
+                return;
+            }
+
+            var guild = ctx.Guild;
+
+            var all = guild!.GetAllMembersAsync();
+            var members = await all.Select(m => m).ToListAsync();
+
+            var rosterLines = FormatRosterText(roster, members)
+                .Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+            var sb = new StringBuilder();
+
+            foreach (var line in rosterLines) {
+                sb.AppendLine(line);
+
+                if (sb.Length > (1900 - $"**Guild Roster for {game.Name}".Count())) {
+                    var embed = new DiscordEmbedBuilder()
+                        .WithTitle($"**Guild Roster for {game.Name}")
+                        .WithDescription(sb.ToString()) // Show the first 10, for example
+                        .WithColor(DiscordColor.CornflowerBlue)
+                        .Build();
+                    var content = new DiscordMessageBuilder().AddEmbed(embed);
+
+                    ctx.TimedMessageAsync(content, Constants.ListResponseDelay).Forget();
+                    sb.Clear();
+                }
+            }
+
+            if (sb.Length > 0) {
+                var embed = new DiscordEmbedBuilder()
+                    .WithTitle($"**Guild Roster for {game.Name}")
+                    .WithDescription(sb.ToString()) // Show the first 10, for example
+                    .WithColor(DiscordColor.CornflowerBlue)
+                    .Build();
+                var content = new DiscordMessageBuilder().AddEmbed(embed);
+
+                ctx.TimedMessageAsync(content, Constants.ListResponseDelay).Forget();
+            }
+        }
+        catch (Exception ex) {
+            Logger.LogError(ex, "Error ShowFilteredRoster.");
+        }
+        finally {
+            if (ctx is TextCommandContext textCtx) {
+                await textCtx.Message.SafeDeleteAsync();
+            }
+        }
+    }
+
+    // !roster, !roster class, !roster class Cleric, !roster level, !roster level 10-20
+    [Command("classroster")]
+    [Description("Shows the guild roster for the current game filtered by class.")]
+    public async Task ShowFilteredRosterByClass(CommandContext ctx,
+        [Description("The value for the filter (e.g., 'Cleric').")]
+        [RemainingText] string? value = null) {
+        try {
+            var (hasGame, game) = await EnsureGame(ctx);
+            if (!hasGame) return;
+
+            int? minLevel = null;
+            int? maxLevel = null;
+
+            var orderBy = "class";
+            var filterClass = value;
+
+            var roster = await Database.GetRoster(game!.Id, orderBy, filterClass, minLevel, maxLevel);
+            if (roster.Count == 0) {
+                ctx.TimedMessageAsync($"Roster is empty for game '{game.Name}'.").Forget();
+                return;
+            }
+
+            var guild = ctx.Guild;
+
+            var all = guild!.GetAllMembersAsync();
+            var members = await all.Select(m => m).ToListAsync();
+
+            var rosterLines = FormatRosterText(roster, members)
+                .Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+            var sb = new StringBuilder();
+
+            foreach (var line in rosterLines) {
+                sb.AppendLine(line);
+
+                if (sb.Length > (1900 - $"**Guild Roster for {game.Name}".Count())) {
+                    var embed = new DiscordEmbedBuilder()
+                        .WithTitle($"**Guild Roster for {game.Name}")
+                        .WithDescription(sb.ToString()) // Show the first 10, for example
+                        .WithColor(DiscordColor.CornflowerBlue)
+                        .Build();
+                    var content = new DiscordMessageBuilder().AddEmbed(embed);
+
+                    ctx.TimedMessageAsync(content, Constants.ListResponseDelay).Forget();
+                    sb.Clear();
+                }
+            }
+
+            if (sb.Length > 0) {
+                var embed = new DiscordEmbedBuilder()
+                    .WithTitle($"**Guild Roster for {game.Name}")
+                    .WithDescription(sb.ToString()) // Show the first 10, for example
+                    .WithColor(DiscordColor.CornflowerBlue)
+                    .Build();
+                var content = new DiscordMessageBuilder().AddEmbed(embed);
+
+                ctx.TimedMessageAsync(content, Constants.ListResponseDelay).Forget();
+            }
+        }
+        catch (Exception ex) {
+            Logger.LogError(ex, "Error ShowFilteredRoster.");
         }
         finally {
             if (ctx is TextCommandContext textCtx) {
@@ -654,7 +811,7 @@ public class GuildCommands {
         var sb = new StringBuilder();
         sb.Append("```");
         foreach (var row in rows) {
-            for (int i = 0; i < row.Length; i++) {
+            for (var i = 0; i < row.Length; i++) {
                 if (i < row.Length - 1) {
                     int width = columnWidths[i] + 5;
                     sb.Append(row[i].PadRight(width));
@@ -666,132 +823,83 @@ public class GuildCommands {
 
             sb.AppendLine();
         }
+
         sb.Append("```");
         return sb.ToString();
     }
 
-    private async Task SetRoster(CommandContext ctx, string? filter = null, string? value = null) {
-        try {
-            var (hasGame, game) = await EnsureGame(ctx);
-            if (!hasGame) return;
+    private async Task SetRoster(CommandContext ctx) {
+        var (hasGame, game) = await EnsureGame(ctx);
+        if (!hasGame) return;
 
-            string? orderBy = null;
-            string? filterClass = null;
-            int? minLevel = null;
-            int? maxLevel = null;
+        var roster = await Database.GetRoster(game!.Id);
+        var guild = ctx.Guild;
+        var all = guild!.GetAllMembersAsync();
+        var members = await all.Select(m => m).ToListAsync();
 
-            if (filter == "class") {
-                orderBy = "class";
-                filterClass = value;
-            }
-            else if (filter == "level") {
-                orderBy = "level";
-                if (!string.IsNullOrEmpty(value) && value.Contains("-")) {
-                    var parts = value.Split('-');
-                    if (parts.Length == 2 && int.TryParse(parts[0], out int min) &&
-                        int.TryParse(parts[1], out int max)) {
-                        minLevel = min;
-                        maxLevel = max;
-                    }
+        var rosterEntries = new List<RosterEntry>();
+
+        foreach (var character in roster) {
+            var guildMember = members.SingleOrDefault(m => m.Id == character.UserId);
+            var guildmemberLink = guildMember is not null ? "" + guildMember.MemberServerName() : "Unknown";
+            rosterEntries.Add(new RosterEntry() {
+                CharacterName = character.CharacterName, Member = guildmemberLink, Class = character.Class ?? "",
+                Level = character.Level.ToString()
+            });
+        }
+
+        var rosterText = FormatRosterText(roster, members);
+
+        if (rosterEntries.Count > 100) {
+            rosterText = "Roster is too large to display in a single message. See attached file.";
+        }
+
+        // Create the Excel file in a MemoryStream
+        using (MemoryStream stream = ExcelHelper.CreateExcelStream(rosterEntries, "Roster")) {
+            var embed = new DiscordEmbedBuilder()
+                .WithTitle($"**Guild Roster for {game.Name}")
+                .WithDescription(rosterText) // Show the first 10, for example
+                .WithColor(DiscordColor.CornflowerBlue)
+                .Build();
+            var content = new DiscordMessageBuilder().AddEmbed(embed);
+
+            var pins = await ctx.Channel.GetPinnedMessagesAsync();
+            var found = false;
+            foreach (var pin in pins) {
+                if (!found && (pin.Content.Contains($"**Guild Roster for {game.Name}") ||
+                               pin.Embeds.Any(e =>
+                                   !string.IsNullOrWhiteSpace(e.Title) &&
+                                   e.Title.Contains($"**Guild Roster for {game.Name}")))) {
+                    found = true;
+                    await pin.ModifyAsync(content);
+                    await pin.UpdatePinnedMessageWithXlsxAndGeneratedTxtFile(stream, "roster.xlsx", content);
+                }
+                else if ((pin.Content.Contains($"**Guild Roster for {game.Name}") ||
+                          pin.Embeds.Any(e =>
+                              !string.IsNullOrWhiteSpace(e.Title) &&
+                              e.Title.Contains($"**Guild Roster for {game.Name}")))) {
+                    //we already found the pinned message and only support one pinned message with the roster
+                    await pin.DeleteAsync();
                 }
             }
 
-            var roster = await Database.GetRoster(game!.Id, orderBy, filterClass, minLevel, maxLevel);
-            var guild = ctx.Guild;
-            var all = guild!.GetAllMembersAsync();
-            var members = await all.Select(m => m).ToListAsync();
-
-            var rosterEntries = new List<RosterEntry>();
-
-            foreach (var character in roster) {
-                var guildMember = members.SingleOrDefault(m => m.Id == character.UserId);
-                var guildmemberLink = guildMember is not null ? "" + guildMember.MemberServerName() : "Unknown";
-                rosterEntries.Add(new RosterEntry() {
-                    CharacterName = character.CharacterName, Member = guildmemberLink, Class = character.Class ?? "",
-                    Level = character.Level.ToString()
-                });
-            }
-
-            var rosterText = FormatRosterText(roster, members);
-
-            if (rosterEntries.Count > 100) {
-                rosterText = "Roster is too large to display in a single message. See attached file.";
-            }
-
-            // Create the Excel file in a MemoryStream
-            using (MemoryStream stream = ExcelHelper.CreateExcelStream(rosterEntries, "Roster")) {
-                var embed = new DiscordEmbedBuilder()
-                    .WithTitle($"**Guild Roster for {game.Name}")
-                    .WithDescription(rosterText) // Show first 10 for example
-                    .WithColor(DiscordColor.CornflowerBlue)
-                    .Build();
-                var content = new DiscordMessageBuilder().AddEmbed(embed);
-
-                //var rosterText = string.Join("\n",
-                //    roster.Select(c => $"{c.CharacterName}, {c.Class ?? "No Class"}, Level {c.Level}, {members.SingleOrDefault(m=>m.Id == c.UserId)?.DisplayName ?? "Unknown"} ()"));
-                //var message = await ctx.RespondAsync($"**Guild Roster for {game.Name}:**\n{rosterText}");
-
-                var pins = await ctx.Channel.GetPinnedMessagesAsync();
-                var found = false;
-                foreach (var pin in pins) {
-                    if (!found && (pin.Content.Contains($"**Guild Roster for {game.Name}") ||
-                                   pin.Embeds.Any(e => !string.IsNullOrWhiteSpace(e.Title) && e.Title.Contains($"**Guild Roster for {game.Name}")))) {
-                        // await pin.UnpinAsync();
-                        found = true;
-                        //await pin.ModifyAsync(msg => msg.Content = $"**Guild Roster for {game.Name}:**\n{rosterText}");
-                        await pin.ModifyAsync(content);
-                        await pin.UpdatePinnedMessageWithXlsxAndGeneratedTxtFile(stream, "roster.xlsx", content);
-                    }
-                    else if ((pin.Content.Contains($"**Guild Roster for {game.Name}") ||
-                              pin.Embeds.Any(e => !string.IsNullOrWhiteSpace(e.Title) && e.Title.Contains($"**Guild Roster for {game.Name}")))) {
-                        //we already found the pinned message and only support one pinned message with the roster
-                        await pin.DeleteAsync();
-                    }
-                }
-
-                if (!found) {
-                    // var message = await ctx.RespondAsync($"**Guild Roster for {game.Name}:**\n{rosterText}");
-                    await ctx.RespondAsync(content);
-                    var message = await ctx.GetResponseAsync();
-                    if (message is not null) {
-                        await message.PinAsync(); // Then pin
-                        await message.UpdatePinnedMessageWithXlsxAndGeneratedTxtFile(stream, "roster.xlsx", content);
-                    }
+            if (!found) {
+                await ctx.RespondAsync(content);
+                var message = await ctx.GetResponseAsync();
+                if (message is not null) {
+                    await message.PinAsync(); // Then pin
+                    await message.UpdatePinnedMessageWithXlsxAndGeneratedTxtFile(stream, "roster.xlsx", content);
                 }
             }
         }
-        finally { }
     }
-
-    // private async Task UpdatePinnedMessageWithFile(DiscordChannel channel, ulong messageId, MemoryStream dataStream, string fileName)
-    // {
-    //     // 1. Ensure stream is at the beginning
-    //     dataStream.Position = 0;
-    //
-    //     // 2. Build the new message content
-    //     var builder = new DiscordMessageBuilder()
-    //         .WithContent("Updated pinned file content.")
-    //         .AddFile(fileName, dataStream, false);
-    //
-    //     try
-    //     {
-    //         // 3. Find the existing message
-    //         var message = await channel.GetMessageAsync(messageId);
-    //
-    //         // 4. Update it
-    //         await message.ModifyAsync(builder);
-    //     }
-    //     catch (System.Exception ex)
-    //     {
-    //         _logger.LogError($"Failed to update message: {ex.Message}");
-    //     }
-    //     // Note: Do not dispose dataStream until after ModifyAsync completes
-    // }
 
     // !removeuser $username
     [Command("removeuser")]
     [Description("Removes all characters for a specific user in the current game. Requires leader permissions.")]
-    public async Task RemoveUser(CommandContext ctx, DiscordMember member) {
+    public async Task RemoveUser(CommandContext ctx,
+        [Description("The user whose characters should be removed.")]
+        DiscordMember member) {
         try {
             var (hasGame, game) = await EnsureGame(ctx);
             if (!hasGame) return;
@@ -804,16 +912,17 @@ public class GuildCommands {
             var interactivity = ctx.Client.ServiceProvider.GetRequiredService<InteractivityExtension>();
             var builder = new DiscordMessageBuilder()
                 .WithContent(
-                    $"Are you sure you want to remove ALL characters in game '{game!.Name}' for user '{member.MemberServerName()}'? Type `yes` to confirm."); // Specify who to mention
+                    $"Are you sure you want to remove ALL characters in game '{game.Name}' for user '{member.MemberServerName()}'? Type `yes` to confirm."); // Specify who to mention
 
             await ctx.RespondAsync(builder);
 
             var challenge = await ctx.GetResponseAsync();
             var response =
-                await interactivity.WaitForMessageAsync(x => x.Author is not null && x.Author.Id == ctx.User.Id, TimeSpan.FromSeconds(30));
+                await interactivity.WaitForMessageAsync(x => x.Author is not null && x.Author.Id == ctx.User.Id,
+                    TimeSpan.FromSeconds(30));
 
             if (!response.TimedOut && response.Result.Content.ToLower() == "yes") {
-                if(challenge is not null) await challenge.DeleteAsync();
+                if (challenge is not null) await challenge.DeleteAsync();
                 var count = await Database.RemoveUserCharacters(game.Id, member.Id);
                 await SetRoster(ctx);
                 ctx.TimedMessageAsync(
@@ -821,14 +930,14 @@ public class GuildCommands {
                     Constants.LongResponseDelay).Forget();
             }
             else {
-                if(challenge is not null) await challenge.DeleteAsync();
+                if (challenge is not null) await challenge.DeleteAsync();
                 ctx.TimedMessageAsync("Action cancelled or timed out. No characters removed.").Forget();
             }
 
             await response.Result.DeleteAsync();
         }
         catch (Exception ex) {
-            _logger.LogError(ex, "Error RemoveUser.");
+            Logger.LogError(ex, "Error RemoveUser.");
         }
         finally {
             if (ctx is TextCommandContext textCtx) {
@@ -860,7 +969,7 @@ public class GuildCommands {
                 Constants.LongResponseDelay).Forget();
         }
         catch (Exception ex) {
-            _logger.LogError(ex, "Error CleanRoster.");
+            Logger.LogError(ex, "Error CleanRoster.");
         }
         finally {
             if (ctx is TextCommandContext textCtx) {
@@ -871,7 +980,11 @@ public class GuildCommands {
 
     [Command("promote")]
     [Description("Promotes or demotes a user. Requires officer permissions.")]
-    public async Task PromoteUser(CommandContext ctx, DiscordMember member, string role) {
+    public async Task PromoteUser(CommandContext ctx,
+        [Description("The user to promote or demote.")]
+        DiscordMember member,
+        [Description("The role to assign (member, officer, leader).")]
+        string role) {
         try {
             var (hasGame, game) = await EnsureGame(ctx);
             if (!hasGame) return;
@@ -910,7 +1023,7 @@ public class GuildCommands {
             }
         }
         catch (Exception ex) {
-            _logger.LogError(ex, "Error PromoteUser.");
+            Logger.LogError(ex, "Error PromoteUser.");
         }
         finally {
             if (ctx is TextCommandContext textCtx) {

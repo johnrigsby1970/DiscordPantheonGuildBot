@@ -1,5 +1,4 @@
-﻿using DSharpPlus;
-using DSharpPlus.Commands;
+﻿using DSharpPlus.Commands;
 using DSharpPlus.Commands.Processors.TextCommands;
 using DSharpPlus.Entities;
 using DiscordPantheonGuildBot.Data;
@@ -14,11 +13,11 @@ namespace DiscordPantheonGuildBot.Commands;
 [Description("Commands for logging and listing event attendance.")]
 public class AttendanceCommands {
     public DatabaseService Database { get;  }
-    private ILogger<GameCommands> _logger { get; set; }
+    private ILogger<GameCommands> Logger { get; set; }
 
     public AttendanceCommands(DatabaseService database, ILogger<GameCommands> logger) {
         Database = database;
-        _logger = logger;
+        Logger = logger;
     }
     
     private async Task<(bool, Game?)> EnsureGame(CommandContext ctx) {
@@ -93,7 +92,7 @@ public class AttendanceCommands {
             switch (scope) {
                 case "online":
                     await foreach (var m in ctx.Guild!.GetAllMembersAsync()) {
-                        if (m.Presence != null && m.Presence.Status != DSharpPlus.Entities.DiscordUserStatus.Offline) {
+                        if (m.Presence != null && m.Presence.Status != DiscordUserStatus.Offline) {
                             userIds.Add(m.Id);
                         }
                     }
@@ -136,7 +135,7 @@ public class AttendanceCommands {
             }
         }
         catch (Exception ex) {
-            _logger.LogError(ex, "Error LogAttendance.");
+            Logger.LogError(ex, "Error LogAttendance.");
         }
         finally {
             if (ctx is TextCommandContext textCtx) {
@@ -170,7 +169,7 @@ public class AttendanceCommands {
             }
         }
         catch (Exception ex) {
-            _logger.LogError(ex, "Error AddUserAttendance.");
+            Logger.LogError(ex, "Error AddUserAttendance.");
         }
         finally {
             if (ctx is TextCommandContext textCtx) {
@@ -204,7 +203,7 @@ public class AttendanceCommands {
             }
         }
         catch (Exception ex) {
-            _logger.LogError(ex, "Error RemoveUserAttendance.");
+            Logger.LogError(ex, "Error RemoveUserAttendance.");
         }
         finally {
             if (ctx is TextCommandContext textCtx) {
@@ -235,7 +234,7 @@ public class AttendanceCommands {
             ctx.TimedMessageAsync(sb.ToString(), Constants.ListResponseDelay).Forget();
         }
         catch (Exception ex) {
-            _logger.LogError(ex, "Error ListAttendance.");
+            Logger.LogError(ex, "Error ListAttendance.");
         }
         finally {
             if (ctx is TextCommandContext textCtx) {
@@ -280,7 +279,7 @@ public class AttendanceCommands {
             }
         }
         catch (Exception ex) {
-            _logger.LogError(ex, "Error ShowAttendance.");
+            Logger.LogError(ex, "Error ShowAttendance.");
         }
         finally {
             if (ctx is TextCommandContext textCtx) {
@@ -316,7 +315,7 @@ public class AttendanceCommands {
             }
         }
         catch (Exception ex) {
-            _logger.LogError(ex, "Error DeleteSession.");
+            Logger.LogError(ex, "Error DeleteSession.");
         }
         finally {
             if (ctx is TextCommandContext textCtx) {

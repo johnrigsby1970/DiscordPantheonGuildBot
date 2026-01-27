@@ -4,6 +4,8 @@ using DSharpPlus.Entities;
 namespace DiscordPantheonGuildBot.Commands;
 
 public static class Extensions {
+    
+    //Fire and forget, so we don't have to wait for the task to complete. Like when we choose to delete messages.'
     public static void Forget(this Task task) {
         // This is a simple fire-and-forget helper that suppresses compiler warnings
         // and ensures exceptions are observed if they happen.
@@ -21,6 +23,7 @@ public static class Extensions {
         return member.DisplayName;
     }
 
+    //Show a message in Discord using a string message and then remove it after a number of seconds
     public static async Task TimedMessageAsync(this CommandContext ctx, string message,
         int delayInSeconds = Constants.ShortResponseDelay) {
         await ctx.RespondAsync(message);
@@ -31,6 +34,7 @@ public static class Extensions {
         }
     }
 
+    //Show a message in Discord using an embed and then remove it after a number of seconds
     public static async Task TimedMessageAsync(this CommandContext ctx, DiscordMessageBuilder embed,
         int delayInSeconds = Constants.ShortResponseDelay) {
         await ctx.RespondAsync(embed);
@@ -41,6 +45,7 @@ public static class Extensions {
         }
     }
 
+    //Safely attempt to delete the message. On failure, log but do not error.
     public static async Task SafeDeleteAsync(this DiscordMessage message) {
         try {
             await message.DeleteAsync();
@@ -58,6 +63,7 @@ public static class Extensions {
         }
     }
 
+    //Add a file attachment to the message
     public static async Task UpdatePinnedMessageWithFile(this DiscordMessage message, MemoryStream dataStream,
         string fileName, DiscordMessageBuilder builder) {
         // 1. Ensure the stream is at the beginning
@@ -71,6 +77,7 @@ public static class Extensions {
         await message.ModifyAsync(builder);
     }
 
+    //Add an Excel file attachment to the message along with a generated text file
     public static async Task UpdatePinnedMessageWithXlsxAndGeneratedTxtFile(this DiscordMessage message,
         MemoryStream dataStream, string fileName, DiscordMessageBuilder builder) {
         // 1. Ensure the stream is at the beginning

@@ -1,13 +1,10 @@
-﻿using DSharpPlus;
-using DSharpPlus.Commands;
+﻿using DSharpPlus.Commands;
 using DSharpPlus.Commands.Processors.TextCommands;
 using DSharpPlus.Entities;
 using DiscordPantheonGuildBot.Data;
 using DiscordPantheonGuildBot.Models;
 using System.Text;
 using DSharpPlus.Interactivity;
-using DSharpPlus.Interactivity.Extensions;
-using DSharpPlus.Net.Models;
 using System.ComponentModel;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -18,11 +15,11 @@ namespace DiscordPantheonGuildBot.Commands;
 [Description("Commands to manage games in the guild.")]
 public class GameCommands {
     public DatabaseService Database { get; }
-    private ILogger<GameCommands> _logger { get; set; }
+    private ILogger<GameCommands> Logger { get; set; }
     
     public GameCommands(DatabaseService database, ILogger<GameCommands> logger) {
         Database = database;
-        _logger = logger;
+        Logger = logger;
     }
     
     private async Task<bool> IsAuthorized(CommandContext ctx) {
@@ -41,7 +38,9 @@ public class GameCommands {
 
     [Command("create")]
     [Description("Creates a new game.")]
-    public async Task CreateGame(CommandContext ctx, string name) {
+    public async Task CreateGame(CommandContext ctx,
+        [Description("Name of a new game to add to the system.")]
+        string name) {
         try {
             if (!await IsAuthorized(ctx)) {
                 ctx.TimedMessageAsync("Only administrators can create games.", Constants.LongResponseDelay).Forget();
@@ -60,7 +59,7 @@ public class GameCommands {
             }
         }
         catch (Exception ex) {
-            _logger.LogError(ex, "Error CreateGame.");
+            Logger.LogError(ex, "Error CreateGame.");
         }
         finally {
             if (ctx is TextCommandContext textCtx) {
@@ -71,7 +70,11 @@ public class GameCommands {
 
     [Command("setdescription")]
     [Description("Sets the description of a game.")]
-    public async Task SetDescription(CommandContext ctx, string gameIdOrName, string description) {
+    public async Task SetDescription(CommandContext ctx, 
+        [Description("Game name or id to set description for.")]
+        string gameIdOrName, 
+        [Description("New description for the game.")]
+        string description) {
         try {
             if (!await IsAuthorized(ctx)) {
                 ctx.TimedMessageAsync("Only administrators can set game descriptions.",
@@ -103,7 +106,7 @@ public class GameCommands {
             }
         }
         catch (Exception ex) {
-            _logger.LogError(ex, "Error SetDescription.");
+            Logger.LogError(ex, "Error SetDescription.");
         }
         finally {
             if (ctx is TextCommandContext textCtx) {
@@ -114,7 +117,11 @@ public class GameCommands {
 
     [Command("setwelcome")]
     [Description("Sets the welcome message of a game.")]
-    public async Task SetWelcome(CommandContext ctx, string gameIdOrName, string welcomeMessage) {
+    public async Task SetWelcome(CommandContext ctx, 
+        [Description("Game name or id to set welcome message for.")]
+        string gameIdOrName, 
+        [Description("Message to display when a new player joins the game.")]
+        string welcomeMessage) {
         try {
             if (!await IsAuthorized(ctx)) {
                 ctx.TimedMessageAsync("Only administrators can set game welcome messages.",
@@ -137,7 +144,7 @@ public class GameCommands {
             }
         }
         catch (Exception ex) {
-            _logger.LogError(ex, "Error SetWelcome.");
+            Logger.LogError(ex, "Error SetWelcome.");
         }
         finally {
             if (ctx is TextCommandContext textCtx) {
@@ -148,7 +155,9 @@ public class GameCommands {
 
     [Command("showwelcome")]
     [Description("Shows the welcome message for a game.")]
-    public async Task ShowWelcome(CommandContext ctx, string? gameIdOrName = null) {
+    public async Task ShowWelcome(CommandContext ctx, 
+        [Description("Game name or id to show welcome message for. If left empty, will show welcome message for current channel's game.")]
+        string? gameIdOrName = null) {
         try {
             Game? game;
             if (string.IsNullOrEmpty(gameIdOrName)) {
@@ -175,7 +184,7 @@ public class GameCommands {
             }
         }
         catch (Exception ex) {
-            _logger.LogError(ex, "Error ShowWelcome.");
+            Logger.LogError(ex, "Error ShowWelcome.");
         }
         finally {
             if (ctx is TextCommandContext textCtx) {
@@ -186,7 +195,9 @@ public class GameCommands {
 
     [Command("assignchannel")]
     [Description("Assigns the current channel to a game.")]
-    public async Task AssignChannel(CommandContext ctx, string gameIdOrName) {
+    public async Task AssignChannel(CommandContext ctx, 
+        [Description("Game name or id to assign to current channel.")]
+        string gameIdOrName) {
         try {
             if (!await IsAuthorized(ctx)) {
                 ctx.TimedMessageAsync("Only administrators can assign channels.").Forget();
@@ -215,7 +226,7 @@ public class GameCommands {
             }
         }
         catch (Exception ex) {
-            _logger.LogError(ex, "Error AssignChannel.");
+            Logger.LogError(ex, "Error AssignChannel.");
         }
         finally {
             if (ctx is TextCommandContext textCtx) {
@@ -226,7 +237,9 @@ public class GameCommands {
 
     [Command("unassignchannel")]
     [Description("Unassigns a channel from its game.")]
-    public async Task UnassignChannel(CommandContext ctx, DiscordChannel? channel = null) {
+    public async Task UnassignChannel(CommandContext ctx, 
+        [Description("Channel to unassign. If left empty, will unassign the current channel.")]
+        DiscordChannel? channel = null) {
         try {
             if (!await IsAuthorized(ctx)) {
                 ctx.TimedMessageAsync("Only administrators can unassign channels.", Constants.LongResponseDelay).Forget();
@@ -243,7 +256,7 @@ public class GameCommands {
             }
         }
         catch (Exception ex) {
-            _logger.LogError(ex, "Error UnassignChannel.");
+            Logger.LogError(ex, "Error UnassignChannel.");
         }
         finally {
             if (ctx is TextCommandContext textCtx) {
@@ -266,7 +279,7 @@ public class GameCommands {
             }
         }
         catch (Exception ex) {
-            _logger.LogError(ex, "Error ShowChannelGame.");
+            Logger.LogError(ex, "Error ShowChannelGame.");
         }
         finally {
             if (ctx is TextCommandContext textCtx) {
@@ -293,7 +306,7 @@ public class GameCommands {
             ctx.TimedMessageAsync(sb.ToString(), Constants.ListResponseDelay).Forget();
         }
         catch (Exception ex) {
-            _logger.LogError(ex, "Error ListGames.");
+            Logger.LogError(ex, "Error ListGames.");
         }
         finally {
             if (ctx is TextCommandContext textCtx) {
@@ -304,7 +317,9 @@ public class GameCommands {
 
     [Command("describegame")]
     [Description("Shows game description.")]
-    public async Task DescribeGame(CommandContext ctx, string? gameIdOrName = null) {
+    public async Task DescribeGame(CommandContext ctx, 
+        [Description("Game name or id to describe. If left empty, will describe channel game.")]
+        string? gameIdOrName = null) {
         try {
             Game? game;
             if (string.IsNullOrEmpty(gameIdOrName)) {
@@ -327,7 +342,7 @@ public class GameCommands {
             ctx.TimedMessageAsync(sb.ToString(), Constants.ListResponseDelay).Forget();
         }
         catch (Exception ex) {
-            _logger.LogError(ex, "Error DescribeGame.");
+            Logger.LogError(ex, "Error DescribeGame.");
         }
         finally {
             if (ctx is TextCommandContext textCtx) {
@@ -338,7 +353,9 @@ public class GameCommands {
 
     [Command("delete")]
     [Description("Deletes a game.")]
-    public async Task DeleteGame(CommandContext ctx, string gameIdOrName) {
+    public async Task DeleteGame(CommandContext ctx, 
+        [Description("Game name or id to remove from the list of games.")]
+        string gameIdOrName) {
         try {
             if (!await IsAuthorized(ctx)) {
                 ctx.TimedMessageAsync("Only administrators can delete games.").Forget();
@@ -367,7 +384,7 @@ public class GameCommands {
             await response.Result.SafeDeleteAsync();
         }
         catch (Exception ex) {
-            _logger.LogError(ex, "Error DeleteGame.");
+            Logger.LogError(ex, "Error DeleteGame.");
         }
         finally {
             if (ctx is TextCommandContext textCtx) {
@@ -402,7 +419,7 @@ public class GameCommands {
                 Constants.ListResponseDelay).Forget();
         }
         catch (Exception ex) {
-            _logger.LogError(ex, "Error ListChannels.");
+            Logger.LogError(ex, "Error ListChannels.");
         }
         finally {
             if (ctx is TextCommandContext textCtx) {
@@ -430,7 +447,7 @@ public class GameCommands {
             ctx.TimedMessageAsync($"Unassigned {count} channels from game '{game.Name}'.").Forget();
         }
         catch (Exception ex) {
-            _logger.LogError(ex, "Error UnassignAllChannels.");
+            Logger.LogError(ex, "Error UnassignAllChannels.");
         }
         finally {
             if (ctx is TextCommandContext textCtx) {

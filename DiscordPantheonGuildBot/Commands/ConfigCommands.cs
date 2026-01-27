@@ -1,5 +1,4 @@
-﻿using DSharpPlus;
-using DSharpPlus.Commands;
+﻿using DSharpPlus.Commands;
 using DSharpPlus.Commands.Processors.TextCommands;
 using DSharpPlus.Entities;
 using DiscordPantheonGuildBot.Data;
@@ -14,11 +13,11 @@ namespace DiscordPantheonGuildBot.Commands;
 [Description("Commands to configure the bot for this server.")]
 public class ConfigCommands {
     public DatabaseService Database { get; }
-    private ILogger<GameCommands> _logger { get; set; }
+    private ILogger<GameCommands> Logger { get; set; }
 
     public ConfigCommands(DatabaseService database, ILogger<GameCommands> logger) {
         Database = database;
-        _logger = logger;
+        Logger = logger;
     }
 
     private async Task<bool> IsAuthorized(CommandContext ctx) {
@@ -40,7 +39,10 @@ public class ConfigCommands {
 
     [Command("addclass")]
     [Description("Adds a new allowed class to the game.")]
-    public async Task AddClass(CommandContext ctx, string className) {
+    public async Task AddClass(
+        CommandContext ctx,         
+        [Description("Name of the class to add to list of approved classes")]
+        string className) {
         try {
             if (!await IsAuthorized(ctx)) {
                 ctx.TimedMessageAsync("Only the server owner or administrators can configure allowed classes.")
@@ -62,7 +64,7 @@ public class ConfigCommands {
             }
         }
         catch (Exception ex) {
-            _logger.LogError(ex, "Error AddClass.");
+            Logger.LogError(ex, "Error AddClass.");
         }
         finally {
             if (ctx is TextCommandContext textCtx) {
@@ -73,7 +75,9 @@ public class ConfigCommands {
 
     [Command("removeclass")]
     [Description("Removes an allowed class from the game.")]
-    public async Task RemoveClass(CommandContext ctx, string className) {
+    public async Task RemoveClass(CommandContext ctx, 
+        [Description("Name of the class to remove from the list of approved classes")]
+        string className) {
         try {
             if (!await IsAuthorized(ctx)) {
                 ctx.TimedMessageAsync("Only the server owner or administrators can configure allowed classes.")
@@ -95,7 +99,7 @@ public class ConfigCommands {
             }
         }
         catch (Exception ex) {
-            _logger.LogError(ex, "Error RemoveClass.");
+            Logger.LogError(ex, "Error RemoveClass.");
         }
         finally {
             if (ctx is TextCommandContext textCtx) {
@@ -116,7 +120,7 @@ public class ConfigCommands {
                 Constants.ListResponseDelay).Forget();
         }
         catch (Exception ex) {
-            _logger.LogError(ex, "Error ListClasses.");
+            Logger.LogError(ex, "Error ListClasses.");
         }
         finally {
             if (ctx is TextCommandContext textCtx) {
@@ -142,7 +146,7 @@ public class ConfigCommands {
             ctx.TimedMessageAsync($"Removed all {count} allowed classes from game '{game.Name}'.").Forget();
         }
         catch (Exception ex) {
-            _logger.LogError(ex, "Error ClearClasses.");
+            Logger.LogError(ex, "Error ClearClasses.");
         }
         finally {
             if (ctx is TextCommandContext textCtx) {
@@ -168,7 +172,7 @@ public class ConfigCommands {
             ctx.TimedMessageAsync($"Reset allowed classes to defaults for game '{game.Name}'.").Forget();
         }
         catch (Exception ex) {
-            _logger.LogError(ex, "Error ResetClasses.");
+            Logger.LogError(ex, "Error ResetClasses.");
         }
         finally {
             if (ctx is TextCommandContext textCtx) {
@@ -179,7 +183,11 @@ public class ConfigCommands {
 
     [Command("maprole")]
     [Description("Maps a Discord role to an internal status (member, officer, leader, raid-leader).")]
-    public async Task MapRole(CommandContext ctx, DiscordRole role, string status) {
+    public async Task MapRole(CommandContext ctx,         
+        [Description("Discord role to map to an internal game status or role")]
+        DiscordRole role, 
+        [Description("Internal game status or role to map to Discord role")]
+        string status) {
         try {
             if (!await IsAuthorized(ctx)) {
                 ctx.TimedMessageAsync("Only the server owner or administrators can configure role mappings.").Forget();
@@ -208,7 +216,7 @@ public class ConfigCommands {
             }
         }
         catch (Exception ex) {
-            _logger.LogError(ex, "Error MapRole.");
+            Logger.LogError(ex, "Error MapRole.");
         }
         finally {
             if (ctx is TextCommandContext textCtx) {
@@ -219,7 +227,9 @@ public class ConfigCommands {
 
     [Command("unmaprole")]
     [Description("Removes a Discord role mapping.")]
-    public async Task UnmapRole(CommandContext ctx, DiscordRole role) {
+    public async Task UnmapRole(CommandContext ctx, 
+        [Description("Discord role to remove from list of mapped roles")]
+        DiscordRole role) {
         try {
             if (!await IsAuthorized(ctx)) {
                 ctx.TimedMessageAsync("Only the server owner or administrators can configure role mappings.").Forget();
@@ -238,7 +248,7 @@ public class ConfigCommands {
             }
         }
         catch (Exception ex) {
-            _logger.LogError(ex, "Error UnmapRole.");
+            Logger.LogError(ex, "Error UnmapRole.");
         }
         finally {
             if (ctx is TextCommandContext textCtx) {
@@ -263,7 +273,7 @@ public class ConfigCommands {
             ctx.TimedMessageAsync($"Removed all {count} role mappings for game '{game.Name}'.").Forget();
         }
         catch (Exception ex) {
-            _logger.LogError(ex, "Error UnmapAllRoles.");
+            Logger.LogError(ex, "Error UnmapAllRoles.");
         }
         finally {
             if (ctx is TextCommandContext textCtx) {
@@ -298,7 +308,7 @@ public class ConfigCommands {
                 Constants.ListResponseDelay).Forget();
         }
         catch (Exception ex) {
-            _logger.LogError(ex, "Error ListRoles.");
+            Logger.LogError(ex, "Error ListRoles.");
         }
         finally {
             if (ctx is TextCommandContext textCtx) {
