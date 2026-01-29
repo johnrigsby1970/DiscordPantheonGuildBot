@@ -653,6 +653,24 @@ public class DatabaseService {
             return -2;
         }
     }
+    
+    public async Task<bool> UpdateGameName(int gameId, string name) {
+        using var connection = new SqliteConnection(_connectionString);
+        await connection.OpenAsync();
+
+        var command = connection.CreateCommand();
+        command.CommandText = "Update Games SET name=$name WHERE Id=$gameId;";
+        command.Parameters.AddWithValue("$gameId", gameId);
+        command.Parameters.AddWithValue("$name", name);
+
+        try {
+            int rows = await command.ExecuteNonQueryAsync();
+            return rows > 0;
+        }
+        catch (SqliteException) {
+            return false;
+        }
+    }
 
     public async Task<Game?> GetGame(ulong guildId, int gameId) {
         using var connection = new SqliteConnection(_connectionString);

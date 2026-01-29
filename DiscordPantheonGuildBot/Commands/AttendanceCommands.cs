@@ -76,7 +76,7 @@ public class AttendanceCommands {
         string scope,
         [Description("Name for the attendance record")]
         [RemainingText] string name,
-        [Description("Voice channel (if scope is channel) - can be used as first arg or after scope if mentioning")]
+        [Description("Voice channel (if scope is channel)")]
         DiscordChannel? channel = null) {
         try {
             var (hasGame, game) = await EnsureGame(ctx);

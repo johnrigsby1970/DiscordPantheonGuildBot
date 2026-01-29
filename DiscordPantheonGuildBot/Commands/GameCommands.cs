@@ -68,11 +68,75 @@ public class GameCommands {
             }
         }
     }
+    
+    
+    [Command("updategamename")]
+    [Description("Updates game name for current channel game.")]
+    public async Task UpdateGameName(CommandContext ctx, 
+        [Description("Name of a new game to add to the system.")]
+        [RemainingText] string name) {
+        try {
+            if (!await IsAuthorized(ctx)) {
+                ctx.TimedMessageAsync("Only administrators can create games.", Constants.LongResponseDelay).Forget();
+                return;
+            }
+
+            var (hasGame, game) = await EnsureGame(ctx);
+            if (!hasGame || game is null) return;
+            
+            bool success = await Database.UpdateGameName(game.Id, name);
+            if (success) {
+                ctx.TimedMessageAsync($"Name updated for game '{game.Id}' to '{name}'.").Forget();
+            }
+            else {
+                ctx.TimedMessageAsync("Failed to update game name.").Forget();
+            }
+        }
+        catch (Exception ex) {
+            Logger.LogError(ex, "Error UpdateGameNameById.");
+        }
+        finally {
+            if (ctx is TextCommandContext textCtx) {
+                await textCtx.Message.SafeDeleteAsync();
+            }
+        }
+    }
+    
+    [Command("updategamenamebyid")]
+    [Description("Updated game name for game with id.")]
+    public async Task UpdateGameNameById(CommandContext ctx, 
+        [Description("Game Id to update.")]
+        int gameId,
+        [Description("Name of a new game to add to the system.")]
+        [RemainingText] string name) {
+        try {
+            if (!await IsAuthorized(ctx)) {
+                ctx.TimedMessageAsync("Only administrators can create games.", Constants.LongResponseDelay).Forget();
+                return;
+            }
+
+            bool success = await Database.UpdateGameName(gameId, name);
+            if (success) {
+                ctx.TimedMessageAsync($"Name updated for game '{gameId}' to '{name}'.").Forget();
+            }
+            else {
+                ctx.TimedMessageAsync("Failed to update game name.").Forget();
+            }
+        }
+        catch (Exception ex) {
+            Logger.LogError(ex, "Error UpdateGameNameById.");
+        }
+        finally {
+            if (ctx is TextCommandContext textCtx) {
+                await textCtx.Message.SafeDeleteAsync();
+            }
+        }
+    }
 
     [Command("setdescriptionbygamename")]
     [Description("Sets the description of a game.")]
     public async Task SetDescriptionByGameName(CommandContext ctx,
-        [Description("The game name and description (e.g., !game setdescription My Game New description)")]
+        [Description("The game name and description (e.g., !game setdescription<game> <description>)")]
         [RemainingText] string args) {
         try {
             if (!await IsAuthorized(ctx)) {
@@ -268,7 +332,7 @@ public class GameCommands {
      [Command("setwelcome")]
     [Description("Sets the welcome message of a game.")]
     public async Task SetWelcome(CommandContext ctx,
-        [Description("The welcome message for game associated with current channel (e.g., !game setwelcome Welcome to the team!)")]
+        [Description("The welcome message for current game (e.g., !game setwelcome Welcome to the team!)")]
         [RemainingText] string? welcomeMessage) {
         try {
             if (!await IsAuthorized(ctx)) {
@@ -306,7 +370,7 @@ public class GameCommands {
     [Command("setwelcomebygamename")]
     [Description("Sets the welcome message of a game.")]
     public async Task SetWelcomeByGameName(CommandContext ctx,
-        [Description("The game name and welcome message (e.g., !game setwelcome My Game Welcome to the team!)")]
+        [Description("The game name and welcome message (e.g., !game setwelcome My Game Welcome Msg)")]
         [RemainingText] string args) {
         try {
             if (!await IsAuthorized(ctx)) {
@@ -420,7 +484,7 @@ public class GameCommands {
     [Command("showwelcome")]
     [Description("Shows the welcome message for a game.")]
     public async Task ShowWelcome(CommandContext ctx, 
-        [Description("Game name or id to show welcome message for. If left empty, will show welcome message for current channel's game.")]
+        [Description("Game name or id to show welcome message for. If left empty, will use current channel's game.")]
         [RemainingText] string? gameIdOrName = null) {
         try {
             var (hasGame, game) = await EnsureGame(ctx);
@@ -447,7 +511,7 @@ public class GameCommands {
     [Command("showwelcomebygameiforname")]
     [Description("Shows the welcome message for a game.")]
     public async Task ShowWelcomeByGameIfOrName(CommandContext ctx, 
-        [Description("Game name or id to show welcome message for. If left empty, will show welcome message for current channel's game.")]
+        [Description("Game name or id to show welcome message for. If left empty, will use current channel's game.")]
         [RemainingText] string? gameIdOrName = null) {
         try {
             Game? game;
