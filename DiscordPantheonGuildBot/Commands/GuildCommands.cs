@@ -137,16 +137,16 @@ public class GuildCommands {
 
     // !add Synn Wizard 11
     [Command("add")]
-    [Description("Adds a character to your user. Will also update if found.")]
+    [Description("Adds a character to your user. Ex. !add Jack Warrior 11")]
     public async Task AddCharacter(CommandContext ctx,
-        [RemainingText] string args)
+            [RemainingText] string args)
         // [Description("The name of the character.")]
         // string name,
         // [Description("The class of the character.")]
         // string? @class = null,
         // [Description("The level of the character.")]
         // int level = 1) 
-        {
+    {
         try {
             var (hasGame, game) = await EnsureGame(ctx);
             if (!hasGame) return;
@@ -158,12 +158,13 @@ public class GuildCommands {
             }
 
             string? @class = null;
-            
+
             var parts = args.Split(' ', StringSplitOptions.RemoveEmptyEntries).ToList();
             if (int.TryParse(parts.Last(), out _)) {
                 level = int.Parse(parts.Last());
                 parts.RemoveAt(parts.Count - 1);
             }
+
             args = string.Join(' ', parts);
             string nameArgs = args;
 
@@ -206,7 +207,7 @@ public class GuildCommands {
             //
             //     @class = matchingClass; // Use the properly cased version from DB
             // }
-            
+
             if (!level.HasValue) level = 1;
             var character = new Character {
                 GuildId = ctx.Guild!.Id,
@@ -214,7 +215,7 @@ public class GuildCommands {
                 UserId = ctx.User.Id,
                 CharacterName = name,
                 Class = @class,
-                Level = level??1
+                Level = level ?? 1
             };
 
             // Check if this is their first character in this game
@@ -260,7 +261,7 @@ public class GuildCommands {
         // string? @class = null,
         // [Description("The level of the character.")]
         // int level = 1
-            ) {
+    ) {
         await AddCharacter(ctx, args);
         //await AddCharacter(ctx, name, @class, level);
         // try {
@@ -335,10 +336,10 @@ public class GuildCommands {
 
     // !level Synn 11
     [Command("level")]
-    [Description("Changes a character's level.")]
+    [Description("Changes a character's level. Ex. !level Synn 11")]
     public async Task ChangeLevel(CommandContext ctx,
-        [Description("The character name and new level (e.g., !level Synn 11 or !level Great Name 11)")]
-        [RemainingText] string args) {
+        [Description("The character name and new level (e.g., !level Synn 11 or !level Great Name 11)")] [RemainingText]
+        string args) {
         try {
             var (hasGame, game) = await EnsureGame(ctx);
             if (!hasGame) return;
@@ -411,7 +412,8 @@ public class GuildCommands {
     [Description("Removes one or all of your characters for the current game.")]
     public async Task RemoveCharacter(CommandContext ctx,
         [Description("The name of the character to remove. If omitted, prompts to remove all characters.")]
-        [RemainingText] string? name = null) {
+        [RemainingText]
+        string? name = null) {
         try {
             var (hasGame, game) = await EnsureGame(ctx);
             if (!hasGame) return;
@@ -425,7 +427,7 @@ public class GuildCommands {
 
                 await ctx.RespondAsync(builder);
                 var challenge = await ctx.GetResponseAsync();
-                
+
                 var response =
                     await interactivity.WaitForMessageAsync(x => x.Author is not null && x.Author.Id == ctx.User.Id,
                         TimeSpan.FromSeconds(30));
@@ -489,8 +491,8 @@ public class GuildCommands {
     [Command("list")]
     [Description("Lists your characters or characters with a specific name for the current game.")]
     public async Task ListCharacters(CommandContext ctx,
-        [Description("The name of the character to search for. If omitted, lists all your characters.")]
-        [RemainingText] string? name = null) {
+        [Description("The name of the character to search for. If omitted, lists all your characters.")] [RemainingText]
+        string? name = null) {
         try {
             var (hasGame, game) = await EnsureGame(ctx);
             if (!hasGame) return;
@@ -654,7 +656,7 @@ public class GuildCommands {
             string? filterClass = null;
             int? minLevel = null;
             int? maxLevel = null;
-            
+
             var orderBy = "level";
             if (!string.IsNullOrEmpty(value) && value.Contains("-")) {
                 var parts = value.Split('-');
@@ -664,7 +666,7 @@ public class GuildCommands {
                     maxLevel = max;
                 }
             }
-            
+
             var roster = await Database.GetRoster(game!.Id, orderBy, filterClass, minLevel, maxLevel);
             if (roster.Count == 0) {
                 ctx.TimedMessageAsync($"Roster is empty for game '{game.Name}'.").Forget();
@@ -721,8 +723,8 @@ public class GuildCommands {
     [Command("classroster")]
     [Description("Shows the guild roster for the current game filtered by class.")]
     public async Task ShowFilteredRosterByClass(CommandContext ctx,
-        [Description("The value for the filter (e.g., 'Cleric').")]
-        [RemainingText] string? value = null) {
+        [Description("The value for the filter (e.g., 'Cleric').")] [RemainingText]
+        string? value = null) {
         try {
             var (hasGame, game) = await EnsureGame(ctx);
             if (!hasGame) return;

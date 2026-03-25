@@ -6,6 +6,7 @@ using DSharpPlus.Commands.Processors.TextCommands;
 using DSharpPlus.Commands.Processors.TextCommands.Parsing;
 using DiscordPantheonGuildBot.Commands;
 using DiscordPantheonGuildBot.Data;
+using DSharpPlus.Entities;
 using DSharpPlus.Interactivity;
 using DSharpPlus.Interactivity.Extensions;
 using Microsoft.Extensions.DependencyInjection;
@@ -36,9 +37,9 @@ internal class Program {
         }
         
         var builder = DiscordClientBuilder.CreateDefault(settingsReader.Token, DiscordIntents.AllUnprivileged 
-                                                                              | DiscordIntents.GuildMembers 
-                                                                              | DiscordIntents.MessageContents 
-                                                                              | DiscordIntents.GuildPresences)
+                                                                               | DiscordIntents.GuildMembers 
+                                                                               | DiscordIntents.MessageContents 
+                                                                               | DiscordIntents.GuildPresences)
             .ConfigureLogging(l => l.AddConsole().SetMinimumLevel(LogLevel.Debug))
             .ConfigureServices(s => s.AddSingleton(new DatabaseService()))
             .ConfigureEventHandlers
@@ -47,11 +48,10 @@ internal class Program {
                     .HandleSessionCreated(SessionCreated)
 
             )
-            .UseInteractivity(new InteractivityConfiguration { 
-                Timeout = TimeSpan.FromSeconds(30) 
+            .UseInteractivity(new InteractivityConfiguration {
+                Timeout = TimeSpan.FromSeconds(30)
             })
             .UseCommands((s, e) => {
-                e.AddCommands(typeof(Program).Assembly);
                 e.CommandErrored += async (s, e) => {
                     Console.WriteLine($"[ERROR] Command '{e.Context.Command.FullName}' failed: {e.Exception.Message}");
                     if (e.Exception.InnerException != null) {
@@ -67,14 +67,23 @@ internal class Program {
                     PrefixResolver = new DefaultPrefixResolver(true, settingsReader.Prefix).ResolvePrefixAsync
                 });
                 e.AddProcessor(textProcessor);
+                e.AddCommands(typeof(Program).Assembly);
+            }, new CommandsConfiguration() 
+            {
+                // Setting this to false prevents D#+ from adding 
+                // default processors that might conflict with your custom ones
+                //DebugGuildId = 1449605058424606763 ,
+                RegisterDefaultCommandProcessors = false 
             });
-
-
         
         Client = builder.Build();
         
+        
+        
+        // We can specify a status for our bot. Let's set it to "playing" and set the activity to "with fire".
+        DiscordActivity activity = new("the voices in my head", DiscordActivityType.ListeningTo);
         try {
-            await Client.ConnectAsync();
+            await Client.ConnectAsync(activity, DiscordUserStatus.Online);
         } catch (Exception ex) {
             Console.WriteLine($"[ERROR] Failed to connect: {ex.Message}");
         }
