@@ -67,7 +67,7 @@ public class HelpModule
             }
             else
             {
-                await ctx.RespondAsync("Command not found.");
+                ctx.SafeRespondAsync("Command not found.").Forget();
                 return;
             }
         }

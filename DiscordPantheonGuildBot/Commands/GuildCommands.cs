@@ -9,8 +9,11 @@ using DSharpPlus.Commands.Processors.TextCommands;
 using DSharpPlus.Interactivity;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using DSharpPlus.Commands.Processors.SlashCommands;
+using DSharpPlus.SlashCommands;
 
 namespace DiscordPantheonGuildBot.Commands;
+
 
 public class GuildCommands {
     public DatabaseService Database { get; }
@@ -95,13 +98,15 @@ public class GuildCommands {
 
     [Command("hello")]
     [Description("Checks that the bot is responding.")]
-    public async Task Hello(CommandContext ctx) {
-        await Ping(ctx);
+   // [SlashCommand("hello", "Checks that the bot is responding.")]
+    public async Task HelloMethod(CommandContext ctx) {
+        await PingMethod(ctx);
     }
 
     [Command("ping")]
     [Description("Checks that the bot is responding.")]
-    public async Task Ping(CommandContext ctx) {
+    //[SlashCommand("ping", "Checks that the bot is responding.")]
+    public async Task PingMethod(CommandContext ctx) {
         try {
             if (ctx.Guild is null) return;
             if (ctx.Member is null) return;
@@ -225,13 +230,16 @@ public class GuildCommands {
             var success = await Database.AddCharacter(character);
             if (success) {
                 await SetRoster(ctx);
+                existingCharacters = await Database.GetUserCharacters(game.Id, ctx.User.Id);
+                var currentCharacter = existingCharacters.SingleOrDefault(c => c.CharacterName == name);
+                if(currentCharacter==null) throw new Exception("Character not found");
                 if (isFirstCharacter && !string.IsNullOrEmpty(game.WelcomeMessage)) {
                     ctx.TimedMessageAsync(
-                            $"{game.WelcomeMessage}\n\nRoster updated for {name} ({@class ?? "No Class"}, Level {level}).")
+                            $"{game.WelcomeMessage}\n\nRoster updated for {name} ({currentCharacter.Class ?? ""}, Level {currentCharacter.Level}).")
                         .Forget();
                 }
                 else {
-                    ctx.TimedMessageAsync($"Roster updated for {name} ({@class ?? "No Class"}, Level {level}) .")
+                    ctx.TimedMessageAsync($"Roster updated for {name} ({currentCharacter.Class ?? ""}, Level {currentCharacter.Level}) .")
                         .Forget();
                 }
             }
@@ -425,7 +433,7 @@ public class GuildCommands {
                     .WithContent(
                         $"Are you sure you want to remove ALL your characters in game '{game!.Name}'? Type `yes` to confirm."); // Specify who to mention
 
-                await ctx.RespondAsync(builder);
+                await ctx.SafeRespondAsync(builder);
                 var challenge = await ctx.GetResponseAsync();
 
                 var response =
@@ -451,7 +459,7 @@ public class GuildCommands {
                     .WithContent(
                         $"Are you sure you want to remove character {name} in game '{game!.Name}'? Type `yes` to confirm."); // Specify who to mention
 
-                await ctx.RespondAsync(builder);
+                await ctx.SafeRespondAsync(builder);
                 var challenge = await ctx.GetResponseAsync();
                 var response =
                     await interactivity.WaitForMessageAsync(x => x.Author is not null && x.Author.Id == ctx.User.Id,
@@ -505,7 +513,7 @@ public class GuildCommands {
                 }
 
                 var characterList = string.Join("\n",
-                    characters.Select(c => $"- {c.CharacterName}: {c.Class ?? "No Class"} (Level {c.Level})"));
+                    characters.Select(c => $"- {c.CharacterName}: {c.Class ?? " "} (Level {c.Level})"));
                 ctx.TimedMessageAsync($"**Your Characters in {game.Name}:**\n{characterList}",
                     Constants.ListResponseDelay).Forget();
             }
@@ -518,7 +526,7 @@ public class GuildCommands {
 
                 var characterList = string.Join("\n",
                     characters.Select(c =>
-                        $"- {c.CharacterName}: {c.Class ?? "No Class"} (Level {c.Level}) [User ID: {c.UserId}]"));
+                        $"- {c.CharacterName}: {c.Class ?? " "} (Level {c.Level}) [User ID: {c.UserId}]"));
                 ctx.TimedMessageAsync($"**Characters named {name} in {game.Name}:**\n{characterList}",
                     Constants.ListResponseDelay).Forget();
             }
@@ -797,7 +805,7 @@ public class GuildCommands {
 
             var row = new[] {
                 character.CharacterName,
-                character.Class ?? "No Class",
+                character.Class ?? "",
                 character.Level.ToString(),
                 guildmemberLink
             };
@@ -886,7 +894,7 @@ public class GuildCommands {
             }
 
             if (!found) {
-                await ctx.RespondAsync(content);
+                await ctx.SafeRespondAsync(content);
                 var message = await ctx.GetResponseAsync();
                 if (message is not null) {
                     await message.PinAsync(); // Then pin
@@ -916,7 +924,7 @@ public class GuildCommands {
                 .WithContent(
                     $"Are you sure you want to remove ALL characters in game '{game.Name}' for user '{member.MemberServerName()}'? Type `yes` to confirm."); // Specify who to mention
 
-            await ctx.RespondAsync(builder);
+            await ctx.SafeRespondAsync(builder);
 
             var challenge = await ctx.GetResponseAsync();
             var response =

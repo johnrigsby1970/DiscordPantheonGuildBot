@@ -111,14 +111,14 @@ public class AttendanceCommands {
                     break;
                 case "channel":
                     if (channel is null || channel.Type != DiscordChannelType.Voice) {
-                        await ctx.RespondAsync("Please specify a valid voice channel for the 'channel' scope.");
+                        await ctx.SafeRespondAsync("Please specify a valid voice channel for the 'channel' scope.");
                         return;
                     }
 
                     userIds = channel.Users.Select(u => u.Id).ToList();
                     break;
                 default:
-                    await ctx.RespondAsync("Invalid scope. Use: online, voice, or channel.");
+                    await ctx.SafeRespondAsync("Invalid scope. Use: online, voice, or channel.");
                     return;
             }
 
@@ -276,13 +276,13 @@ public class AttendanceCommands {
                 }
 
                 if (sb.Length > 1900) {
-                    await ctx.RespondAsync(sb.ToString());
+                    await ctx.SafeRespondAsync(sb.ToString());
                     sb.Clear();
                 }
             }
 
             if (sb.Length > 0) {
-                await ctx.RespondAsync(sb.ToString());
+                await ctx.SafeRespondAsync(sb.ToString());
             }
         }
         catch (Exception ex) {

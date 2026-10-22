@@ -6,6 +6,7 @@ using DSharpPlus.Commands.Processors.TextCommands;
 using DSharpPlus.Commands.Processors.TextCommands.Parsing;
 using DiscordPantheonGuildBot.Commands;
 using DiscordPantheonGuildBot.Data;
+using DSharpPlus.Commands.Processors.SlashCommands;
 using DSharpPlus.Entities;
 using DSharpPlus.Interactivity;
 using DSharpPlus.Interactivity.Extensions;
@@ -53,32 +54,53 @@ internal class Program {
             })
             .UseCommands((s, e) => {
                 e.CommandErrored += async (s, e) => {
-                    Console.WriteLine($"[ERROR] Command '{e.Context.Command.FullName}' failed: {e.Exception.Message}");
-                    if (e.Exception.InnerException != null) {
-                        Console.WriteLine($"[INNER ERROR] {e.Exception.InnerException.Message}");
+                    if (e.Context is TextCommandContext textCtx) {
+                        if (e.Context.Command != null && !string.IsNullOrWhiteSpace(e.Context.Command.FullName)) {
+                            Console.WriteLine($"[ERROR] Command '{e.Context.Command.FullName}' failed: {e.Exception.Message}");
+                        }
+                        else {
+                            Console.WriteLine($"[ERROR] Command failed: {e.Exception.Message}");
+                        }
+                        if (e.Exception.InnerException != null) {
+                            Console.WriteLine($"[INNER ERROR] {e.Exception.InnerException.Message}");
+                        }
+                        await e.Context.TimedMessageAsync($"❌ An error occurred in Bastion Guild Manager Bot: {e.Exception.Message}", Constants.ShortResponseDelay);
                     }
-                    await e.Context.TimedMessageAsync($"❌ An error occurred in Bastion Guild Manager Bot: {e.Exception.Message}", Constants.ShortResponseDelay);
+                    else {
+                        if (e.Context.Command != null && !string.IsNullOrWhiteSpace(e.Context.Command.FullName)) {
+                            Console.WriteLine($"[ERROR] Command '{e.Context.Command.FullName}' failed: {e.Exception.Message}");
+                        }
+                        else {
+                            Console.WriteLine($"[ERROR] Command failed: {e.Exception.Message}");
+                        }
+                        if (e.Exception.InnerException != null) {
+                            Console.WriteLine($"[INNER ERROR] {e.Exception.InnerException.Message}");
+                        }
+                        await ((SlashCommandContext)e.Context).TimedMessageAsync($"❌ An error occurred in Bastion Guild Manager Bot: {e.Exception.Message}", Constants.ShortResponseDelay);
+                    }
+                    
                 };
+                
+                e.AddCommands(typeof(Program).Assembly);
                 // e.AddCommands(typeof(GuildCommands));
                 // e.AddCommands(typeof(ConfigCommands));
                 // e.AddCommands(typeof(AttendanceCommands));
                 // e.AddCommands(typeof(GameCommands));
                 var textProcessor = new TextCommandProcessor(new TextCommandConfiguration {
-                    PrefixResolver = new DefaultPrefixResolver(true, settingsReader.Prefix).ResolvePrefixAsync
+                    PrefixResolver = new DefaultPrefixResolver(true, settingsReader.Prefix, "/").ResolvePrefixAsync
                 });
                 e.AddProcessor(textProcessor);
-                e.AddCommands(typeof(Program).Assembly);
-            }, new CommandsConfiguration() 
+                }
+                , new CommandsConfiguration() 
             {
                 // Setting this to false prevents D#+ from adding 
                 // default processors that might conflict with your custom ones
                 //DebugGuildId = 1449605058424606763 ,
                 RegisterDefaultCommandProcessors = false 
-            });
+            } 
+                );
         
         Client = builder.Build();
-        
-        
         
         // We can specify a status for our bot. Let's set it to "playing" and set the activity to "with fire".
         DiscordActivity activity = new("the voices in my head", DiscordActivityType.ListeningTo);

@@ -250,9 +250,12 @@ public class DatabaseService {
 
             var command = connection.CreateCommand();
 
+            // COALESCE keeps the current 'Class' column value if $class is NULL
             command.CommandText = @"
-            UPDATE Characters SET Class=$class, Level=$level 
-            WHERE GuildId=$guildId AND GameId=$gameId AND UserId=$userId AND CharacterName=$characterName;
+        UPDATE Characters 
+        SET Class = COALESCE($class, Class), 
+            Level = $level 
+        WHERE GuildId = $guildId AND GameId = $gameId AND UserId = $userId AND CharacterName = $characterName;
         ";
 
             command.Parameters.AddWithValue("$guildId", character.GuildId);
@@ -268,17 +271,16 @@ public class DatabaseService {
                 command.CommandText = @"
             INSERT OR IGNORE INTO Characters (GuildId, GameId, UserId, CharacterName, Class, Level)
             VALUES ($guildId, $gameId, $userId, $characterName, $class, $level);
-        ";
+            ";
                 rowsAffected = await command.ExecuteNonQueryAsync();
             }
-        
+    
             return rowsAffected > 0;
         }
         catch (Exception ex) {
             Console.WriteLine(ex);
             return false;
         }
-        
     }
 
     public async Task<bool> UpdateCharacterLevel(int gameId, ulong userId, string name, int level) {

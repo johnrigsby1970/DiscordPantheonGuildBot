@@ -725,7 +725,7 @@ public class GameCommands {
 
             var interactivity = ctx.Client.ServiceProvider.GetRequiredService<InteractivityExtension>();
 
-            await ctx.RespondAsync($"Are you sure you want to remove game '{game!.Name}'? Type `yes` to confirm.");
+            await ctx.SafeRespondAsync($"Are you sure you want to remove game '{game!.Name}'? Type `yes` to confirm.");
             var response = await interactivity.WaitForMessageAsync(x => x.Author is not null && x.Author.Id == ctx.User.Id, TimeSpan.FromSeconds(30));
 
             if (!response.TimedOut && response.Result.Content.ToLower() == "yes") {

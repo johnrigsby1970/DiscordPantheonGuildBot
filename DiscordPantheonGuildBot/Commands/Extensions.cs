@@ -1,4 +1,6 @@
 ﻿using DSharpPlus.Commands;
+using DSharpPlus.Commands.Processors.SlashCommands;
+using DSharpPlus.Commands.Processors.TextCommands;
 using DSharpPlus.Entities;
 
 namespace DiscordPantheonGuildBot.Commands;
@@ -26,7 +28,45 @@ public static class Extensions {
     //Show a message in Discord using a string message and then remove it after a number of seconds
     public static async Task TimedMessageAsync(this CommandContext ctx, string message,
         int delayInSeconds = Constants.ShortResponseDelay) {
-        await ctx.RespondAsync(message);
+        await ctx.SafeRespondAsync(message);
+        var response = await ctx.GetResponseAsync();
+        if (response is not null) {
+            await Task.Delay(delayInSeconds * 1000);
+            await response.SafeDeleteAsync();
+        }
+    }
+    
+    //Show a message in Discord using an embed and then remove it after a number of seconds
+    public static async Task TimedMessageAsync(this CommandContext ctx, DiscordMessageBuilder embed,
+        int delayInSeconds = Constants.ShortResponseDelay) {
+        await ctx.SafeRespondAsync(embed);
+        var response = await ctx.GetResponseAsync();
+        if (response is not null) {
+            await Task.Delay(delayInSeconds * 1000);
+            await response.SafeDeleteAsync();
+        }
+    }
+    
+    public static async Task TimedMessageAsync(this SlashCommandContext ctx, string message,
+        int delayInSeconds = Constants.ShortResponseDelay) {
+        try {
+            await ctx.SafeRespondAsync(message);
+            var response = await ctx.GetResponseAsync();
+            if (response is not null) {
+                await Task.Delay(delayInSeconds * 1000);
+                await response.SafeDeleteAsync();
+            }
+        }
+        catch (Exception ex) {
+            var s = ex.Message;
+            //ignore
+        }
+    }
+    
+    //Show a message in Discord using an embed and then remove it after a number of seconds
+    public static async Task TimedMessageAsync(this SlashCommandContext ctx, DiscordMessageBuilder embed,
+        int delayInSeconds = Constants.ShortResponseDelay) {
+        await ctx.SafeRespondAsync(embed);
         var response = await ctx.GetResponseAsync();
         if (response is not null) {
             await Task.Delay(delayInSeconds * 1000);
@@ -34,16 +74,31 @@ public static class Extensions {
         }
     }
 
-    //Show a message in Discord using an embed and then remove it after a number of seconds
-    public static async Task TimedMessageAsync(this CommandContext ctx, DiscordMessageBuilder embed,
-        int delayInSeconds = Constants.ShortResponseDelay) {
-        await ctx.RespondAsync(embed);
-        var response = await ctx.GetResponseAsync();
-        if (response is not null) {
-            await Task.Delay(delayInSeconds * 1000);
-            await response.SafeDeleteAsync();
+    public static async Task SafeRespondAsync(this CommandContext ctx, string message) {
+        if (ctx is TextCommandContext) {
+            await ctx.RespondAsync(message);
+        }
+        if (ctx is SlashCommandContext &&  ((SlashCommandContext)ctx).Interaction is null ) {
+            await ctx.RespondAsync(message);
+        }
+        else {
+            await ctx.EditResponseAsync(message);
         }
     }
+    
+    public static async Task SafeRespondAsync(this CommandContext ctx, DiscordMessageBuilder embed) {
+        if (ctx is TextCommandContext) {
+            await ctx.RespondAsync(embed);
+        }
+        //is it in a deferred state
+        if (ctx is SlashCommandContext &&  ((SlashCommandContext)ctx).Interaction is null ) {
+            await ctx.RespondAsync(embed);
+        }
+        else {
+            await ctx.EditResponseAsync(embed);
+        }
+    }
+
 
     //Safely attempt to delete the message. On failure, log but do not error.
     public static async Task SafeDeleteAsync(this DiscordMessage message) {
